@@ -1,0 +1,92 @@
+{
+  "projectType": "saas",
+  "projectName": "ESP Santa Fe de Antioquia",
+  "projectDescription": "Public services management system for the municipality of Santa Fe de Antioquia",
+  "theme": "linden",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/pqrsd-management",
+              "features/document-management",
+              "features/employee-management",
+              "features/blog-system",
+              "features/product-catalog",
+              "features/bidding-procurement",
+              "features/brigade-management"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/database-schema",
+              "architecture/services-layer",
+              "architecture/authentication"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/controllers",
+              "api/services",
+              "api/models"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/getting-started",
+              "deployment/configuration",
+              "deployment/database-setup"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "PQRSD (citizen request) management system",
+    "Document and legal files management",
+    "Employee directory and profiles",
+    "News and blog content management",
+    "Public service catalog",
+    "Bidding and procurement participation",
+    "Brigade coordination and management",
+    "ASP.NET Core Identity integration"
+  ],
+  "publicApiSurface": [
+    "CategoryService",
+    "PQRSDService",
+    "DocumentService",
+    "EmployeeService",
+    "BlogService",
+    "ProductService",
+    "BiddingParticipantService",
+    "BrigadeService",
+    "NacionLicitanteService",
+    "EmailSendGrid",
+    "UploadedFileIIS",
+    "FormatStringUrl"
+  ]
+}
