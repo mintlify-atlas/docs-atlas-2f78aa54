@@ -1,0 +1,161 @@
+---
+title: 'Getting Started with Deployment'
+description: 'Learn how to deploy ESP Santa Fe de Antioquia to production'
+---
+
+## Overview
+
+ESP Santa Fe de Antioquia is an ASP.NET Core 3.1 web application that can be deployed to IIS (Internet Information Services) on Windows Server or other hosting platforms that support ASP.NET Core.
+
+This guide will walk you through the deployment process, from prerequisites to going live in production.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Server Requirements">
+    Ensure your server meets these minimum requirements:
+    
+    - Windows Server 2012 R2 or later (for IIS deployment)
+    - .NET Core 3.1 Runtime or SDK
+    - IIS 7.5 or later with ASP.NET Core Module
+    - SQL Server 2012 or later
+    - Minimum 2GB RAM (4GB recommended)
+    - 10GB available disk space
+  </Step>
+
+  <Step title="Install .NET Core Runtime">
+    Download and install the .NET Core 3.1 Runtime (or SDK) from Microsoft:
+    
+    ```bash
+    # Download the ASP.NET Core Runtime 3.1
+    # https://dotnet.microsoft.com/download/dotnet/3.1
+    ```
+    
+    Verify installation:
+    
+    ```bash
+    dotnet --list-runtimes
+    ```
+    
+    You should see `Microsoft.AspNetCore.App 3.1.x` in the output.
+  </Step>
+
+  <Step title="Install IIS and ASP.NET Core Module">
+    Enable IIS on Windows Server:
+    
+    ```powershell
+    # Open PowerShell as Administrator
+    Install-WindowsFeature -name Web-Server -IncludeManagementTools
+    ```
+    
+    Install the ASP.NET Core Module (ANCM) for IIS:
+    
+    Download the ASP.NET Core Module installer from Microsoft and run it. This module is required for hosting ASP.NET Core applications in IIS.
+  </Step>
+
+  <Step title="Prepare SQL Server Database">
+    - Ensure SQL Server is installed and accessible
+    - Create a database named `BDESPSantaFeAnt`
+    - Create a SQL Server login with appropriate permissions
+    - Test database connectivity from the application server
+  </Step>
+</Steps>
+
+<Warning>
+  Make sure to install the **ASP.NET Core Hosting Bundle** on the server, not just the runtime. The hosting bundle includes the ASP.NET Core Module required for IIS.
+</Warning>
+
+## Application Architecture
+
+The application consists of several projects:
+
+- **prjESPSantaFeAnt** - Main web application (ASP.NET Core MVC)
+- **persistenDatabase** - Entity Framework Core data layer
+- **services** - Business logic and service layer
+- **model** - Domain models
+- **modelDTOs** - Data Transfer Objects
+
+## Key Technologies
+
+- **Framework**: ASP.NET Core 3.1
+- **Database**: SQL Server with Entity Framework Core 3.1.9
+- **Authentication**: ASP.NET Core Identity
+- **Email Service**: SendGrid API
+- **ORM**: Entity Framework Core
+- **Mapping**: AutoMapper 8.1.0
+
+## Deployment Workflow
+
+The typical deployment workflow follows these steps:
+
+<Steps>
+  <Step title="Build the Application">
+    Build the application in Release configuration to optimize performance.
+  </Step>
+  
+  <Step title="Publish the Application">
+    Publish the application to a folder that will be deployed to the server.
+  </Step>
+  
+  <Step title="Configure Production Settings">
+    Update `appsettings.json` with production connection strings and settings.
+  </Step>
+  
+  <Step title="Deploy to Server">
+    Copy published files to the server and configure IIS.
+  </Step>
+  
+  <Step title="Run Database Migrations">
+    Apply Entity Framework migrations to create or update the database schema.
+  </Step>
+  
+  <Step title="Test and Verify">
+    Test the application thoroughly in the production environment.
+  </Step>
+</Steps>
+
+## Publishing the Application
+
+From the project directory:
+
+```bash
+cd src/prjESPSantaFeAnt
+dotnet publish -c Release -o ./publish
+```
+
+This creates a production-ready build in the `publish` folder with:
+
+- Optimized compiled assemblies
+- Static files (CSS, JavaScript, images)
+- Configuration files
+- All required dependencies
+
+<Note>
+  The publish folder contains everything needed to run the application. You can copy this entire folder to your production server.
+</Note>
+
+## Next Steps
+
+Now that you understand the deployment prerequisites and workflow, proceed to:
+
+- [Production Configuration](/deployment/configuration) - Configure settings for production
+- [Database Setup](/deployment/database-setup) - Set up and migrate your production database
+
+## Security Checklist
+
+Before deploying to production, review this security checklist:
+
+- [ ] Change default connection strings
+- [ ] Use environment variables or secure storage for secrets
+- [ ] Enable HTTPS and obtain SSL certificate
+- [ ] Configure proper authentication settings
+- [ ] Review and update CORS policies
+- [ ] Enable logging and monitoring
+- [ ] Set up regular database backups
+- [ ] Configure firewall rules
+- [ ] Disable detailed error messages in production
+- [ ] Review Identity password requirements
+
+<Warning>
+  Never commit production connection strings or API keys to source control. Use environment variables, Azure Key Vault, or other secure secret management solutions.
+</Warning>

@@ -1,0 +1,341 @@
+---
+title: 'Document Management'
+description: 'Legal document repository and public access system'
+icon: 'folder-open'
+---
+
+## Overview
+
+The Document Management system provides a centralized repository for legal and official documents related to ESP Santa Fe de Antioquia. This feature enables administrators to upload, organize, and publish documents while providing public access to important legal information.
+
+<Card title="Purpose" icon="scale-balanced">
+  This system ensures transparency by making official documents, legal notices, procurement documents, and organizational policies publicly accessible through the website.
+</Card>
+
+## User Workflows
+
+<Steps>
+  <Step title="Admin Creates Document Entry">
+    Administrators create a new document entry with:
+    - Document name
+    - Project/category name
+    - Detailed description
+    - Related project selection (e.g., bidding processes)
+  </Step>
+  
+  <Step title="Upload Files">
+    One or more PDF files are uploaded and associated with the document entry. Files are stored in `/images/filesDocuments/`.
+  </Step>
+  
+  <Step title="Public Access">
+    Citizens browse documents at `/documentos-legales` and access specific documents using URL-friendly names at `/documentos-legales/{urlName}`.
+  </Step>
+  
+  <Step title="Download Files">
+    Public users can download PDF files through the secure `/documentos-publicos` endpoint.
+  </Step>
+</Steps>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Multi-File Support" icon="files">
+    Each document entry can have multiple PDF files attached
+  </Card>
+  
+  <Card title="URL-Friendly Access" icon="link">
+    Automatic generation of SEO-friendly URLs from document names
+  </Card>
+  
+  <Card title="Version Tracking" icon="clock-rotate-left">
+    Track creation and update dates to monitor document revisions
+  </Card>
+  
+  <Card title="Project Association" icon="diagram-project">
+    Link documents to specific projects or bidding processes
+  </Card>
+</CardGroup>
+
+## Data Model
+
+```csharp
+public class Document
+{
+    public int ID { get; set; }                    // Primary key
+    public string Name { get; set; }               // Document title
+    public string UrlName { get; set; }            // URL-friendly slug
+    public string NameProyect { get; set; }        // Associated project
+    public string Description { get; set; }        // HTML description
+    public DateTime CreateDate { get; set; }       // Creation timestamp
+    public DateTime DateUpdate { get; set; }       // Last update timestamp
+    
+    // Navigation property
+    public IEnumerable<FileDocument> FileDocument { get; set; }
+}
+```
+
+### File Document Model
+
+```csharp
+public class FileDocument
+{
+    public int Id { get; set; }
+    public int DocumentoId { get; set; }           // Foreign key to Document
+    public string FileName { get; set; }           // Original file name
+    public string FilePath { get; set; }           // Storage path
+    public DateTime UploadDate { get; set; }       // Upload timestamp
+}
+```
+
+## Controller Actions
+
+### Admin Routes
+
+<Accordion title="List Documents - GET /Documents">
+  **Purpose**: Display all documents in admin dashboard
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - Sortable list of all documents
+  - Quick view of key metadata
+  - Actions for edit and delete
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Index()
+  {
+      var _documents = from a in await _documentService.GetAll()
+                       select new ModelViewDocument
+                       {
+                          ID = a.ID,
+                          Name = a.Name,
+                          NameProyect = a.NameProyect,
+                          Description = a.Description,
+                          CreateDate = a.CreateDate.ToString("MMM dd, yyyy",
+                              CultureInfo.CreateSpecificCulture("es-CO"))
+                       };
+      return View(_documents);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Create Document - GET/POST /Documents/Create">
+  **Purpose**: Add new document entry
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Validation**:
+  - Checks for duplicate names
+  - Validates file formats (PDF only)
+  - Ensures required fields are completed
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public async Task<IActionResult> Create(DocumentCreateDTO model)
+  {
+      if (_documentService.DuplicaName(model.Name))
+      {
+          ViewData["DuplicaName"] = "El nombre ya esta utilizada, favor cambiarlo";
+          return View(model);
+      }
+
+      if (ModelState.IsValid)
+      {
+          await _documentService.Create(model);
+          return RedirectToAction(nameof(Index));
+      }
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="View Details - GET /Documents/Details/{id}">
+  **Purpose**: View document with all attached files
+  
+  **Access**: SuperAdmin, Admin (for integer ID), Public (for URL name)
+  
+  **Features**:
+  - Displays document metadata
+  - Lists all attached files
+  - Shows update history
+  - Indicates if document has been modified
+  
+  The controller has two overloaded Details methods:
+  ```csharp
+  // Admin view by ID
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Details(int? id)
+  
+  // Public view by URL
+  [Route("documentos-legales/{urlName}")]
+  public async Task<IActionResult> Details(string urlName)
+  ```
+</Accordion>
+
+<Accordion title="Delete Document - GET/POST /Documents/Delete/{id}">
+  **Purpose**: Remove document and associated files
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Warning**: Deletion is permanent and removes all associated file records.
+</Accordion>
+
+### Public Routes
+
+<Accordion title="Browse Documents - GET /documentos-legales">
+  **Purpose**: Public listing of all available documents
+  
+  **Access**: Public (no authentication)
+  
+  **Features**:
+  - Grid or list view of documents
+  - Filter by project/category
+  - Search functionality
+  - Direct links to document details
+  
+  ```csharp
+  [Route("documentos-legales")]
+  public async Task<IActionResult> Document()
+  {
+      var _documents = from a in await _documentService.GetAll()
+                       select new ModelViewDocument
+                       {
+                           ID = a.ID,
+                           Name = a.Name,
+                           UrlName = a.UrlName,
+                           NameProyect = a.NameProyect,
+                           Description = a.Description,
+                           CreateDate = a.CreateDate.ToString("MMM dd, yyyy",
+                               CultureInfo.CreateSpecificCulture("es-CO")),
+                           FileDocument = a.FileDocument
+                       };
+      return View(_documents);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Download File - GET /documentos-publicos">
+  **Purpose**: Serve PDF files to users
+  
+  **Access**: Public
+  
+  **Security**: Files are served from a protected directory with proper MIME types
+  
+  ```csharp
+  [AllowAnonymous]
+  [ActionName("documentos-publicos")]
+  public FileResult PublicDocuments(string routeFile)
+  {
+      return File($"/images/filesDocuments/{routeFile}", 
+                  "application/pdf", 
+                  $"{routeFile}.pdf");
+  }
+  ```
+</Accordion>
+
+## Document Categories
+
+Documents are typically organized by project association:
+
+<CardGroup cols={2}>
+  <Card title="Procurement Documents" icon="gavel">
+    Bidding terms, requirements, and specifications linked to procurement processes
+  </Card>
+  
+  <Card title="Legal Notices" icon="file-certificate">
+    Official announcements, regulations, and compliance documents
+  </Card>
+  
+  <Card title="Financial Reports" icon="chart-line">
+    Budget documents, financial statements, and audit reports
+  </Card>
+  
+  <Card title="Policies & Procedures" icon="book">
+    Internal policies, operational procedures, and guidelines
+  </Card>
+</CardGroup>
+
+## Update Tracking
+
+The system automatically tracks document modifications:
+
+```csharp
+var itHasUpdated = false;
+if (_document.DateUpdate >= _document.CreateDate)
+{
+    itHasUpdated = true;
+}
+```
+
+This indicator helps users identify recently updated documents and maintains transparency about content changes.
+
+## File Storage
+
+<Note>
+  PDF files are stored in `/wwwroot/images/filesDocuments/` with original filenames preserved. Ensure this directory has appropriate write permissions for the application pool.
+</Note>
+
+### Storage Best Practices
+
+1. **Naming Convention**: Use descriptive, URL-safe filenames
+2. **File Size**: Limit PDFs to 10MB for optimal performance
+3. **Backup**: Regularly backup the filesDocuments directory
+4. **Security**: Serve files through the controller, not direct file access
+
+## Integration with Bidding System
+
+Documents can be linked to bidding processes (NacionLicitante):
+
+```csharp
+ViewData["NameLicitante"] = new SelectList(_context.Masters
+    .Where(x => x.NacionLicitante == true)
+    .OrderByDescending(x => x.DateCreate), "Id", "NameMaster");
+```
+
+This integration allows procurement documents to be:
+- Associated with specific bidding processes
+- Displayed on bidding detail pages
+- Tracked as part of procurement workflows
+
+## SEO Optimization
+
+The system generates URL-friendly slugs from document names:
+
+<Steps>
+  <Step title="Name Normalization">
+    Document names are converted to lowercase and spaces replaced with hyphens
+  </Step>
+  
+  <Step title="Special Character Handling">
+    Accents and special characters are removed or transliterated
+  </Step>
+  
+  <Step title="URL Generation">
+    Final URL: `/documentos-legales/nombre-del-documento`
+  </Step>
+</Steps>
+
+## Validation Rules
+
+<CardGroup cols={2}>
+  <Card title="Required Fields" icon="asterisk">
+    - Document name (must be unique)
+    - Project name
+    - Description
+    - At least one PDF file
+  </Card>
+  
+  <Card title="File Validations" icon="file-shield">
+    - Format: PDF only
+    - Size: Maximum 10MB per file
+    - Multiple files allowed per document
+  </Card>
+</CardGroup>
+
+## Related Features
+
+- [Bidding & Procurement](/features/bidding-procurement) - Links documents to bidding processes
+- [PQRSD Management](/features/pqrsd-management) - Citizens may reference documents in requests

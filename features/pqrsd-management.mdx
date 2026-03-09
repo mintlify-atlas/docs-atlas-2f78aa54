@@ -1,0 +1,269 @@
+---
+title: 'PQRSD Management'
+description: 'Citizen request and complaint handling system for transparent communication'
+icon: 'messages'
+---
+
+## Overview
+
+The PQRSD (Peticiones, Quejas, Reclamos, Sugerencias y Denuncias) system is a comprehensive citizen engagement platform that enables residents to submit requests, complaints, claims, suggestions, and reports to ESP Santa Fe de Antioquia. This feature ensures transparent communication between the organization and its stakeholders.
+
+<Card title="What is PQRSD?" icon="circle-question">
+  PQRSD stands for:
+  - **P**eticiones (Requests)
+  - **Q**uejas (Complaints)
+  - **R**eclamos (Claims)
+  - **S**ugerencias (Suggestions)
+  - **D**enuncias (Reports/Denunciations)
+</Card>
+
+## User Workflow
+
+<Steps>
+  <Step title="Citizen Submits Request">
+    Citizens access the public form at `/formular-pqrsd` and provide:
+    - Full name and email address
+    - Subject line describing the issue
+    - Detailed description
+    - Request type (P, Q, R, S, or D)
+    - Optional file attachment
+  </Step>
+  
+  <Step title="System Generates Tracking Code">
+    Upon submission, the system generates a unique GUID tracking code that citizens can use to reference their request.
+  </Step>
+  
+  <Step title="Admin Reviews Request">
+    Administrators view all pending requests in the admin dashboard at `/PQRSDs`, where they can:
+    - View request details
+    - Track submission dates
+    - Monitor response status
+  </Step>
+  
+  <Step title="Admin Responds">
+    Administrators compose and submit official responses, which:
+    - Mark the request as answered
+    - Record the response date
+    - Store the reply text
+  </Step>
+</Steps>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Public Submission" icon="file-pen">
+    Open access form allowing any citizen to submit requests without authentication
+  </Card>
+  
+  <Card title="File Attachments" icon="paperclip">
+    Support for document uploads to provide evidence or additional context
+  </Card>
+  
+  <Card title="Status Tracking" icon="chart-line">
+    Track whether requests have been answered with timestamps
+  </Card>
+  
+  <Card title="Response Management" icon="reply">
+    Admin interface for reviewing and responding to citizen requests
+  </Card>
+</CardGroup>
+
+## Data Model
+
+The PQRSD entity stores comprehensive information about each citizen request:
+
+```csharp
+public class PQRSD
+{
+    public Guid PQRSDID { get; set; }              // Unique tracking identifier
+    public string NamePerson { get; set; }         // Citizen's name
+    public string Email { get; set; }              // Contact email
+    public string PQRSDName { get; set; }          // Subject/title
+    public string Description { get; set; }        // Detailed description
+    public string NameSotypeOfRequest { get; set; } // Request type (P/Q/R/S/D)
+    public DateTime DateCreate { get; set; }       // Submission date
+    public string File { get; set; }               // Attached file path
+    
+    // Response tracking
+    public string Reply { get; set; }              // Admin response
+    public Boolean IsAnswered { get; set; }        // Response status
+    public DateTime AnswerDate { get; set; }       // Response date
+}
+```
+
+## Controller Actions
+
+The `PQRSDsController` manages all PQRSD operations:
+
+### Public Routes
+
+<Accordion title="Create PQRSD - GET/POST /formular-pqrsd">
+  **Purpose**: Allow citizens to submit new requests
+  
+  **Access**: Public (no authentication required)
+  
+  **Process**:
+  1. GET displays the submission form
+  2. POST validates and creates the request
+  3. Redirects to confirmation page with tracking code
+  
+  ```csharp
+  [Route("formular-pqrsd")]
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public async Task<IActionResult> Create(PQRSDCreateDto model)
+  {
+      if (ModelState.IsValid)
+      {
+          var _create = await _iPQSDService.Create(model);
+          _StatusMessaje = _create.PQRSDID;
+          return RedirectToAction("TypePQRSD");
+      }
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="View Tracking Code - GET /pqrsd">
+  **Purpose**: Display confirmation page with tracking code
+  
+  **Access**: Public
+  
+  Shows the generated GUID that citizens can use to reference their request in future communications.
+</Accordion>
+
+### Admin Routes
+
+<Accordion title="List All Requests - GET /PQRSDs">
+  **Purpose**: Display all PQRSD submissions
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - View all requests with key details
+  - Filter by answered/unanswered status
+  - See submission dates formatted in Spanish locale
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public IActionResult Index()
+  {
+      var _getAll = _iPQSDService.GetAll();
+      var _pqrsd = from a in _getAll
+                  select new ModelViewPQRSD
+                  {
+                      PQRSDID = a.PQRSDID,
+                      NamePerson = a.NamePerson,
+                      Email = a.Email,
+                      PQRSDName = a.PQRSDName,
+                      NameSotypeOfRequest = a.NameSotypeOfRequest,
+                      IsAnsweredPQRSD = a.IsAnswered,
+                      DateCreate = a.DateCreate.ToString("MMMM dd, yyyy",
+                          CultureInfo.CreateSpecificCulture("es-CO"))
+                  };
+      return View(_pqrsd);
+  }
+  ```
+</Accordion>
+
+<Accordion title="View Details - GET /PQRSDs/Details/{id}">
+  **Purpose**: View complete request details including response
+  
+  **Access**: SuperAdmin, Admin
+  
+  Displays full information including description, attachments, and admin responses.
+</Accordion>
+
+<Accordion title="Submit Response - POST /PQRSDs/Review">
+  **Purpose**: Submit administrative response to a request
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Process**:
+  1. Accepts reply text and PQRSD ID
+  2. Updates IsAnswered status to true
+  3. Records answer date and time
+  4. Redirects to request list
+  
+  ```csharp
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public IActionResult Review(ReviewCreateDto model)
+  {
+      if (ModelState.IsValid)
+      {
+          var id = model.ID;
+          var _stated = _iPQSDService.Review(id, model);
+          return RedirectToAction("Index");
+      }
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Delete Request - GET/POST /PQRSDs/Delete/{id}">
+  **Purpose**: Remove a PQRSD request
+  
+  **Access**: SuperAdmin, Admin
+  
+  Requires confirmation before permanent deletion.
+</Accordion>
+
+## Request Types
+
+The system categorizes requests into five types:
+
+| Type | Spanish | Description |
+|------|---------|-------------|
+| P | Peticiones | Formal requests for information or services |
+| Q | Quejas | Complaints about service quality or conduct |
+| R | Reclamos | Claims regarding billing or service delivery |
+| S | Sugerencias | Suggestions for improvements |
+| D | Denuncias | Reports of misconduct or violations |
+
+## Validation Rules
+
+The submission form enforces the following validations:
+
+<CardGroup cols={2}>
+  <Card title="Required Fields" icon="asterisk">
+    - Citizen name (max 150 characters)
+    - Valid email address
+    - Subject line (max 150 characters)
+    - Description text
+    - Request type selection
+  </Card>
+  
+  <Card title="Optional Fields" icon="circle-dot">
+    - File attachment (PDF or image)
+  </Card>
+</CardGroup>
+
+## Integration Points
+
+<Note>
+  The PQRSD system integrates with the email notification service to alert administrators of new submissions. Ensure SMTP settings are configured in `appsettings.json`.
+</Note>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="For Citizens">
+    - Provide clear, specific descriptions
+    - Include relevant dates and reference numbers
+    - Attach supporting documentation when available
+    - Save your tracking code for future reference
+  </Accordion>
+  
+  <Accordion title="For Administrators">
+    - Respond to requests within mandated timeframes
+    - Provide comprehensive, helpful responses
+    - Mark requests as answered promptly
+    - Keep response language professional and clear
+  </Accordion>
+</AccordionGroup>
+
+## Related Features
+
+- [Document Management](/features/document-management) - For publishing legal documents
+- [Blog System](/features/blog-system) - For public announcements

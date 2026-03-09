@@ -1,0 +1,221 @@
+---
+title: 'Installation'
+description: 'Step-by-step guide to install and set up ESP Santa Fe de Antioquia'
+---
+
+## Prerequisites
+
+Before installing ESP Santa Fe de Antioquia, ensure your development environment meets the following requirements:
+
+<Steps>
+  <Step title=".NET Core 3.1 SDK">
+    Download and install the [.NET Core 3.1 SDK](https://dotnet.microsoft.com/download/dotnet/3.1) for your operating system.
+    
+    Verify the installation:
+    ```bash
+    dotnet --version
+    ```
+    
+    Expected output: `3.1.x`
+  </Step>
+
+  <Step title="SQL Server">
+    Install SQL Server 2017 or later. You can use:
+    - SQL Server Express (free)
+    - SQL Server Developer Edition (free)
+    - SQL Server Standard/Enterprise
+    
+    Or use SQL Server on Docker:
+    ```bash
+    docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourStrong@Passw0rd" \
+      -p 1433:1433 --name sqlserver \
+      -d mcr.microsoft.com/mssql/server:2019-latest
+    ```
+  </Step>
+
+  <Step title="Development Tools">
+    Install one of the following IDEs:
+    - [Visual Studio 2019](https://visualstudio.microsoft.com/) or later
+    - [Visual Studio Code](https://code.visualstudio.com/) with C# extension
+    - [JetBrains Rider](https://www.jetbrains.com/rider/)
+  </Step>
+</Steps>
+
+## Clone the Repository
+
+Clone the project from GitHub:
+
+```bash
+git clone https://github.com/JhotaMS/empsantafedeantioquia.gov.co.git
+cd empsantafedeantioquia.gov.co
+```
+
+## Install Dependencies
+
+The project uses several NuGet packages that need to be restored:
+
+<CodeGroup>
+```bash .NET CLI
+cd src/prjESPSantaFeAnt
+dotnet restore
+```
+
+```bash Visual Studio
+# Right-click solution in Solution Explorer
+# Select "Restore NuGet Packages"
+```
+</CodeGroup>
+
+### Key Dependencies
+
+The project includes the following major packages:
+
+| Package | Version | Purpose |
+|---------|---------|----------|
+| `Microsoft.EntityFrameworkCore.SqlServer` | 3.1.9 | SQL Server database provider |
+| `Microsoft.AspNetCore.Identity.UI` | 3.1.9 | ASP.NET Core Identity authentication |
+| `AutoMapper.Extensions.Microsoft.DependencyInjection` | 8.1.0 | Object mapping |
+| `SendGrid` | 9.21.0 | Email service integration |
+| `X.PagedList.Mvc.Core` | 8.0.7 | Pagination support |
+
+<Note>
+  All dependencies are defined in `src/prjESPSantaFeAnt/prjESPSantaFeAnt.csproj` and will be automatically restored.
+</Note>
+
+## Database Setup
+
+<Steps>
+  <Step title="Create the Database">
+    Create a new database in SQL Server named `BDESPSantaFeAnt`:
+    
+    ```sql
+    CREATE DATABASE BDESPSantaFeAnt;
+    ```
+  </Step>
+
+  <Step title="Update Connection String">
+    Edit `appsettings.json` to configure your database connection:
+    
+    ```json
+    {
+      "ConnectionStrings": {
+        "DefaultConnection": "Server=YOUR_SERVER;Database=BDESPSantaFeAnt;Trusted_Connection=True;MultipleActiveResultSets=true"
+      }
+    }
+    ```
+    
+    Replace `YOUR_SERVER` with your SQL Server instance name (e.g., `localhost`, `.\SQLEXPRESS`, or `(localdb)\mssqllocaldb`).
+  </Step>
+
+  <Step title="Run Migrations">
+    Apply Entity Framework Core migrations to create the database schema:
+    
+    ```bash
+    dotnet ef database update
+    ```
+    
+    This creates all required tables including:
+    - ASP.NET Identity tables (Users, Roles, etc.)
+    - Categories, Products, Employees
+    - Documents, Brigades, PQRSD
+    - BiddingParticipants and related entities
+  </Step>
+</Steps>
+
+<Warning>
+  Ensure SQL Server is running before executing migrations. The migration file `20210927150752_CreandoBD.cs` contains the initial database schema.
+</Warning>
+
+## Build the Application
+
+Build the solution to verify everything is set up correctly:
+
+<CodeGroup>
+```bash .NET CLI
+dotnet build
+```
+
+```bash Visual Studio
+# Press Ctrl+Shift+B
+# Or Build > Build Solution
+```
+</CodeGroup>
+
+Expected output should show:
+```
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+```
+
+## Run the Application
+
+Start the development server:
+
+<CodeGroup>
+```bash .NET CLI
+dotnet run
+```
+
+```bash Visual Studio
+# Press F5 for debugging
+# Or Ctrl+F5 for running without debugging
+```
+</CodeGroup>
+
+The application will start on:
+- **HTTPS**: `https://localhost:5001`
+- **HTTP**: `http://localhost:5000`
+
+<Note>
+  The first run may take longer as the application compiles and initializes the database.
+</Note>
+
+## Verify Installation
+
+Once the application is running:
+
+1. Navigate to `https://localhost:5001` in your browser
+2. You should see the ESP Santa Fe de Antioquia homepage
+3. Try accessing `/Identity/Account/Register` to verify Identity is working
+4. Check the console for any startup errors
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Configure authentication, email, and file uploads
+  </Card>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture/overview">
+    Learn about the application architecture
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you see errors connecting to SQL Server:
+
+1. Verify SQL Server is running
+2. Check your connection string format
+3. For Windows Authentication, use `Trusted_Connection=True`
+4. For SQL Authentication, use `User Id=sa;Password=YourPassword`
+
+### Port Already in Use
+
+If ports 5000/5001 are in use, configure custom ports in `Program.cs:prjESPSantaFeAnt:24`:
+
+```csharp
+webBuilder.UseUrls("http://localhost:5024", "https://localhost:5025");
+```
+
+### Missing Dependencies
+
+If build fails with missing package errors:
+
+```bash
+dotnet clean
+dotnet restore
+dotnet build
+```

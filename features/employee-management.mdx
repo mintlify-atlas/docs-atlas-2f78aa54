@@ -1,0 +1,332 @@
+---
+title: 'Employee Management'
+description: 'Staff directory and organizational chart system'
+icon: 'users'
+---
+
+## Overview
+
+The Employee Management system maintains a public directory of ESP Santa Fe de Antioquia staff members. This feature promotes transparency by allowing citizens to identify key personnel, understand the organizational structure, and know who to contact for specific services.
+
+<Card title="Transparency Requirement" icon="eye">
+  Public sector organizations in Colombia must publish information about their personnel as part of transparency and accountability requirements. This system fulfills those obligations.
+</Card>
+
+## User Workflows
+
+<Steps>
+  <Step title="Admin Adds Employee">
+    Administrators create employee profiles with:
+    - Full name
+    - Job title/position (Occupation)
+    - Profile photograph
+  </Step>
+  
+  <Step title="Photo Upload">
+    Professional headshot is uploaded and stored with the employee record
+  </Step>
+  
+  <Step title="Public Display">
+    Employee profiles are automatically displayed on the public directory page at `/funcionarios`
+  </Step>
+  
+  <Step title="Updates & Removal">
+    Administrators can update employee information or remove employees who have left the organization
+  </Step>
+</Steps>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Simple Profile Management" icon="id-card">
+    Streamlined interface for adding and managing employee profiles
+  </Card>
+  
+  <Card title="Photo Gallery" icon="images">
+    Visual directory with employee photographs for easy identification
+  </Card>
+  
+  <Card title="Public Directory" icon="address-book">
+    Accessible listing at `/funcionarios` for citizen reference
+  </Card>
+  
+  <Card title="Role-Based Access" icon="shield-halved">
+    Admin-only editing with public read access
+  </Card>
+</CardGroup>
+
+## Data Model
+
+The Employee entity is intentionally simple, focusing on essential public information:
+
+```csharp
+public class Employee
+{
+    public int EmployeeId { get; set; }            // Primary key
+    public string Name { get; set; }               // Full name
+    public string Occupation { get; set; }         // Job title/position
+    public string CoverPage { get; set; }          // Photo file path
+    public DateTime DateCreate { get; set; }       // Record creation date
+}
+```
+
+### Model View
+
+```csharp
+public class ModelViewEmployees
+{
+    public int EmployeeId { get; set; }
+    
+    [DisplayName("Nombre")]
+    public string Name { get; set; }
+    
+    [DisplayName("Fotografía")]
+    public string CoverPage { get; set; }
+    
+    [DisplayName("Cargo")]
+    public string Occupation { get; set; }
+}
+```
+
+## Controller Actions
+
+### Admin Routes
+
+<Accordion title="List Employees - GET /Employees">
+  **Purpose**: Display all employees in admin dashboard
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - Complete list of all employee records
+  - Quick access to edit and delete actions
+  - Photo thumbnails for visual reference
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Index()
+  {
+      var _employees = from a in await _employeeService.GetAll()
+                       select new ModelViewEmployees
+                       {
+                           EmployeeId = a.EmployeeId,
+                           Name = a.Name,
+                           Occupation = a.Occupation,
+                           CoverPage = a.CoverPage
+                       };
+      return View(_employees);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Add Employee - GET/POST /Employees/Create">
+  **Purpose**: Create new employee profile
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Required Fields**:
+  - Employee name
+  - Occupation/job title
+  - Profile photograph (uploaded via EmployeeCreateDto)
+  
+  ```csharp
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Create(EmployeeCreateDto model)
+  {
+      if (ModelState.IsValid)
+      {
+          var result = await _employeeService.Create(model);
+          return RedirectToAction(nameof(Index));
+      }
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Delete Employee - GET/POST /Employees/Delete/{id}">
+  **Purpose**: Remove employee from directory
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Use Cases**:
+  - Employee has left the organization
+  - Position has been eliminated
+  - Information correction needed
+  
+  ```csharp
+  [HttpPost, ActionName("Delete")]
+  [ValidateAntiForgeryToken]
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> DeleteConfirmed(int id)
+  {
+      await _employeeService.DeleteConfirmed(id);
+      return RedirectToAction(nameof(Index));
+  }
+  ```
+</Accordion>
+
+### Public Routes
+
+<Accordion title="Public Directory - GET /funcionarios">
+  **Purpose**: Display employee directory to citizens
+  
+  **Access**: Public (no authentication required)
+  
+  **Features**:
+  - Grid layout with photos and names
+  - Job titles displayed prominently
+  - Responsive design for mobile access
+  - Alphabetical or hierarchical sorting
+  
+  ```csharp
+  [Route("funcionarios")]
+  [AllowAnonymous]
+  public async Task<IActionResult> ListEmployees()
+  {
+      var _employees = from a in await _employeeService.GetAll()
+                       select new ModelViewEmployees
+                       {
+                           EmployeeId = a.EmployeeId,
+                           Name = a.Name,
+                           Occupation = a.Occupation,
+                           CoverPage = a.CoverPage
+                       };
+      return View(_employees);
+  }
+  ```
+</Accordion>
+
+## Employee Photo Guidelines
+
+<Card title="Photo Requirements" icon="camera">
+  To maintain a professional and consistent directory:
+  
+  - **Format**: JPG or PNG
+  - **Dimensions**: Minimum 400x400 pixels (square)
+  - **Background**: Neutral, professional background
+  - **Attire**: Business or business casual
+  - **File Size**: Maximum 2MB
+  - **Quality**: Clear, well-lit professional headshot
+</Card>
+
+## Data Transfer Object (DTO)
+
+The create operation uses a DTO for file upload handling:
+
+```csharp
+public class EmployeeCreateDto
+{
+    [Required(ErrorMessage = "El nombre es requerido")]
+    [MaxLength(150)]
+    [DisplayName("Nombre completo")]
+    public string Name { get; set; }
+    
+    [Required(ErrorMessage = "El cargo es requerido")]
+    [MaxLength(100)]
+    [DisplayName("Cargo")]
+    public string Occupation { get; set; }
+    
+    [Required(ErrorMessage = "La fotografía es requerida")]
+    [DisplayName("Fotografía")]
+    [ValidateExtensionImg] // Custom validation attribute
+    [ImageSizes]           // Custom size validation
+    public IFormFile CoverPage { get; set; }
+}
+```
+
+## Display Options
+
+The employee directory can be displayed in different formats:
+
+<Tabs>
+  <Tab title="Grid View">
+    Default layout showing employee cards with photos, names, and titles in a responsive grid
+  </Tab>
+  
+  <Tab title="List View">
+    Alternative table layout for compact display with sortable columns
+  </Tab>
+  
+  <Tab title="Organizational Chart">
+    Hierarchical view showing reporting structure (requires additional customization)
+  </Tab>
+</Tabs>
+
+## Privacy Considerations
+
+<Warning>
+  The employee directory displays only essential public information. Do not include:
+  - Personal contact information (personal emails, phone numbers)
+  - Home addresses
+  - Salary information
+  - Personal identification numbers
+  - Sensitive personal data
+</Warning>
+
+### Public Information Policy
+
+As per Colombian transparency laws, the following information IS appropriate for public display:
+- Full name
+- Official job title
+- Professional photograph
+- Official contact information (office phone, institutional email)
+
+## Service Layer
+
+The `IEmployeeService` interface provides abstraction for employee operations:
+
+```csharp
+public interface IEmployeeService
+{
+    Task<IEnumerable<Employee>> GetAll();
+    Task<Employee> GetById(int? id);
+    Task<Employee> Create(EmployeeCreateDto model);
+    Task DeleteConfirmed(int id);
+}
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Citizen Looking for Contact">
+    A citizen needs to contact the person responsible for water service connections:
+    1. Visits `/funcionarios`
+    2. Finds "Coordinador de Conexiones" in the directory
+    3. Identifies the appropriate person to contact
+  </Accordion>
+  
+  <Accordion title="New Employee Onboarding">
+    HR department adds a new employee:
+    1. Receives professional photo from new hire
+    2. Logs into admin panel
+    3. Navigates to Employees > Create
+    4. Enters name, position, and uploads photo
+    5. Employee appears on public directory immediately
+  </Accordion>
+  
+  <Accordion title="Organizational Change">
+    An employee is promoted to a new position:
+    1. Admin edits the employee record (if edit functionality exists)
+    2. Updates the Occupation field
+    3. Changes are reflected immediately on public directory
+  </Accordion>
+</AccordionGroup>
+
+## Future Enhancements
+
+<Note>
+  Consider these potential additions:
+  - Department/division grouping
+  - Email and phone number fields (institutional)
+  - Biography or responsibilities description
+  - Edit functionality (currently not implemented)
+  - Search and filter capabilities
+  - Export to PDF for printing
+</Note>
+
+## Related Features
+
+- [Blog System](/features/blog-system) - Announce new staff appointments
+- [Document Management](/features/document-management) - Publish organizational charts

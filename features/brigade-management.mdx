@@ -1,0 +1,549 @@
+---
+title: 'Brigade Management'
+description: 'Community service event coordination and scheduling'
+icon: 'users-medical'
+---
+
+## Overview
+
+The Brigade Management system coordinates community service events (brigades) organized by ESP Santa Fe de Antioquia. These brigades provide free services to communities, such as plumbing repairs, water quality testing, infrastructure maintenance, and educational workshops.
+
+<Card title="Community Outreach" icon="handshake">
+  Brigades are a key component of ESP's social responsibility program, bringing services directly to communities and fostering positive relationships with citizens.
+</Card>
+
+## User Workflows
+
+<Steps>
+  <Step title="Admin Plans Brigade">
+    Administrators create brigade events with:
+    - Brigade name/title
+    - Event description and services offered
+    - Brigade date and location
+    - Featured image or promotional material
+    - Author/coordinator information
+  </Step>
+  
+  <Step title="Publication">
+    Brigade is published (Statud = true) and appears on public listing at `/brigadas`
+  </Step>
+  
+  <Step title="Citizen Discovery">
+    Community members browse upcoming and past brigades on the public page
+  </Step>
+  
+  <Step title="Event Details">
+    Citizens access full information at `/brigadas/{nameBrigade}` including date, services, and location
+  </Step>
+</Steps>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Event Scheduling" icon="calendar-days">
+    Schedule brigades with specific dates for community planning
+  </Card>
+  
+  <Card title="Rich Descriptions" icon="file-lines">
+    HTML content support for detailed service descriptions
+  </Card>
+  
+  <Card title="Photo Gallery" icon="images">
+    Featured images to promote events and document activities
+  </Card>
+  
+  <Card title="Public Access" icon="globe">
+    Open listing for community awareness and participation
+  </Card>
+</CardGroup>
+
+## Data Model
+
+Brigades use the Master entity with specific configuration:
+
+```csharp
+public class Master  // Used for brigades
+{
+    public int Id { get; set; }                    // Primary key
+    public string NameMaster { get; set; }         // Brigade title
+    public string UrlMaster { get; set; }          // URL-friendly slug
+    public string Description { get; set; }        // HTML description
+    public string CoverPage { get; set; }          // Featured image
+    public string Author { get; set; }             // Coordinator name
+    public Boolean Statud { get; set; }            // Published status
+    public DateTime DateBrigade { get; set; }      // Event date
+    public DateTime DateCreate { get; set; }       // Record creation
+    public DateTime DateUpdate { get; set; }       // Last modification
+}
+```
+
+### View Model
+
+```csharp
+public class ModelViewBrigade
+{
+    public int Id { get; set; }
+    
+    [DisplayName("Nombre")]
+    public string NameMaster { get; set; }         // Brigade title
+    
+    public string UrlMaster { get; set; }          // URL slug
+    
+    [DisplayName("Descripción")]
+    public string Description { get; set; }        // Full content
+    
+    [DisplayName("Portada")]
+    public string CoverPage { get; set; }          // Image path
+    
+    [DisplayName("Estatus")]
+    public Boolean Statud { get; set; }            // Published?
+    
+    [DisplayName("Autor")]
+    public string Author { get; set; }             // Coordinator
+    
+    [DisplayName("Brigada")]
+    public string DateBrigade { get; set; }        // Event date (formatted)
+    
+    [DisplayName("Creación")]
+    public string DateCreate { get; set; }         // Created date
+    
+    [DisplayName("Actualización")]
+    public DateTime DateUpdate { get; set; }       // Updated date
+}
+```
+
+## Controller Actions
+
+### Admin Routes
+
+<Accordion title="List Brigades - GET /Brigades">
+  **Purpose**: Display all brigades in admin dashboard
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - View all scheduled brigades
+  - See brigade dates and creation dates
+  - Access to details, edit, and delete
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Index()
+  {
+      var _brigada = from a in await _brigadeService.GetAll()
+                     select new ModelViewBrigade
+                     {
+                         Id = a.Id,
+                         NameMaster = a.NameMaster,
+                         DateBrigade = a.DateBrigade.ToString("MMM dd, yyyy",
+                             CultureInfo.CreateSpecificCulture("es-CO")),
+                         DateCreate = a.DateCreate.ToString("MMM dd, yyyy",
+                             CultureInfo.CreateSpecificCulture("es-CO"))
+                     };
+      return View(_brigada);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Create Brigade - GET/POST /Brigades/Create">
+  **Purpose**: Schedule new brigade event
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Validation**:
+  - Checks for duplicate names
+  - Validates brigade date
+  - Ensures required fields are completed
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public async Task<IActionResult> Create(BrigadeCreateDto model)
+  {
+      if (_brigadeService.DuplicaName(model.NameMaster))
+      {
+          ViewData["DuplicaName"] = 
+              "El nombre ya ha sido utilizado, por favor cambielo";
+          View(model);
+      }
+
+      if (ModelState.IsValid)
+      {
+          await _brigadeService.Create(model);
+          return RedirectToAction(nameof(Index));
+      }
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="View Details (Admin) - GET /Brigades/Details/{id}">
+  **Purpose**: Preview brigade in admin context
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - Full brigade information
+  - All metadata and timestamps
+  - Edit and delete options
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Details(int? id)
+  {
+      if (id == null)
+      {
+          return NotFound();
+      }
+
+      var _brigade = await _brigadeService.GetById(id);
+      
+      if (_brigade == null)
+      {
+          return NotFound();
+      }
+
+      var _model = new ModelViewBrigade
+      {
+          Id = _brigade.Id,
+          NameMaster = _brigade.NameMaster,
+          UrlMaster = _brigade.UrlMaster,
+          Description = _brigade.Description,
+          CoverPage = _brigade.CoverPage,
+          Statud = _brigade.Statud,
+          Author = _brigade.Author,
+          DateBrigade = _brigade.DateBrigade.ToString("MMM dd, yyyy",
+              CultureInfo.CreateSpecificCulture("es-CO"))
+      };
+
+      ViewData["detail"] = true;
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Delete Brigade - GET/POST /Brigades/Delete/{id}">
+  **Purpose**: Remove brigade record
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Use Cases**:
+  - Brigade was cancelled
+  - Duplicate entry correction
+  - Outdated information cleanup
+</Accordion>
+
+### Public Routes
+
+<Accordion title="Browse Brigades - GET /brigadas">
+  **Purpose**: Public listing of all brigades
+  
+  **Access**: Public
+  
+  **Features**:
+  - Shows all published brigades
+  - Displays cover images and dates
+  - Links to detailed information
+  - Sorted by date (newest first)
+  
+  ```csharp
+  [Route("brigadas")]
+  public async Task<IActionResult> BrigadesGetAll()
+  {
+      var _brigada = from a in await _brigadeService.GetAll()
+                     select new ModelViewBrigade
+                     {
+                         Id = a.Id,
+                         NameMaster = a.NameMaster,
+                         UrlMaster = a.UrlMaster,
+                         Description = a.Description,
+                         CoverPage = a.CoverPage,
+                         DateBrigade = a.DateBrigade.ToString("MMM dd, yyyy",
+                             CultureInfo.CreateSpecificCulture("es-CO")),
+                         DateCreate = a.DateCreate.ToString("MMM dd, yyyy",
+                             CultureInfo.CreateSpecificCulture("es-CO"))
+                     };
+      return View(_brigada);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Brigade Details - GET /brigadas/{nameBrigade}">
+  **Purpose**: Display complete brigade information
+  
+  **Access**: Public
+  
+  **Features**:
+  - Full description with HTML formatting
+  - Brigade date prominently displayed
+  - Services offered
+  - Location information
+  - Coordinator contact
+  - Featured photo or gallery
+  
+  ```csharp
+  [Route("brigadas/{nameBrigade}")]
+  public async Task<IActionResult> Details(string nameBrigade)
+  {
+      if (nameBrigade == string.Empty)
+      {
+          return NotFound();
+      }
+
+      var _brigade = await _brigadeService.GetById(nameBrigade);
+
+      if (_brigade == null)
+      {
+          return NotFound();
+      }
+
+      var _model = new ModelViewBrigade
+      {
+          Id = _brigade.Id,
+          NameMaster = _brigade.NameMaster,
+          UrlMaster = _brigade.UrlMaster,
+          Description = _brigade.Description,
+          CoverPage = _brigade.CoverPage,
+          Statud = _brigade.Statud,
+          Author = _brigade.Author,
+          DateCreate = _brigade.DateCreate.ToString("MMMM dd, yyyy",
+              CultureInfo.CreateSpecificCulture("es-CO")),
+          DateBrigade = _brigade.DateBrigade.ToString("MMMM dd, yyyy",
+              CultureInfo.CreateSpecificCulture("es-CO"))
+      };
+
+      ViewData["detail"] = false;
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+## Brigade Types
+
+Common brigade activities organized by ESP:
+
+<CardGroup cols={2}>
+  <Card title="Repair Brigades" icon="wrench">
+    Free plumbing repairs, leak fixes, and minor installations for vulnerable communities
+  </Card>
+  
+  <Card title="Educational Workshops" icon="chalkboard-user">
+    Water conservation education, proper use of services, and bill payment information
+  </Card>
+  
+  <Card title="Water Quality Testing" icon="flask">
+    Community water quality assessments and home testing services
+  </Card>
+  
+  <Card title="Infrastructure Inspection" icon="magnifying-glass">
+    Community infrastructure evaluations and maintenance recommendations
+  </Card>
+</CardGroup>
+
+## Brigade Description Structure
+
+When creating brigade content, include:
+
+<Steps>
+  <Step title="Event Overview">
+    Brief description of the brigade's purpose and target community
+  </Step>
+  
+  <Step title="Services Offered">
+    Detailed list of free services available during the brigade
+  </Step>
+  
+  <Step title="Date, Time & Location">
+    Specific scheduling and venue information
+  </Step>
+  
+  <Step title="What to Bring">
+    Items or documents citizens should bring to participate
+  </Step>
+  
+  <Step title="Contact Information">
+    Coordinator name and contact for questions
+  </Step>
+</Steps>
+
+## Example Brigade Content
+
+```html
+<h2>Brigada de Reparaciones - Barrio El Centro</h2>
+
+<h3>Descripción</h3>
+<p>ESP Santa Fe de Antioquia llevará servicios gratuitos de reparación de 
+acueducto a las familias del Barrio El Centro. Nuestro equipo técnico 
+atenderá fugas, cambios de medidores y reparaciones menores.</p>
+
+<h3>Servicios Gratuitos</h3>
+<ul>
+  <li>Reparación de fugas en tuberías</li>
+  <li>Cambio de empaques en llaves y grifos</li>
+  <li>Revisión de medidores</li>
+  <li>Asesoría sobre consumo de agua</li>
+</ul>
+
+<h3>Fecha y Lugar</h3>
+<p><strong>Fecha:</strong> Sábado, 15 de Junio de 2024<br>
+<strong>Hora:</strong> 8:00 AM - 2:00 PM<br>
+<strong>Lugar:</strong> Parque Principal del Barrio El Centro</p>
+
+<h3>¿Qué Traer?</h3>
+<ul>
+  <li>Documento de identidad</li>
+  <li>Última factura de servicios públicos</li>
+</ul>
+
+<h3>Coordinador</h3>
+<p>Ing. Carlos Rodríguez<br>
+Celular: (310) 555-1234<br>
+Email: brigadas@espsantafe.gov.co</p>
+```
+
+## Data Transfer Object
+
+```csharp
+public class BrigadeCreateDto
+{
+    [Required(ErrorMessage = "El nombre es requerido")]
+    [MaxLength(200)]
+    [DisplayName("Nombre de la brigada")]
+    public string NameMaster { get; set; }
+    
+    [Required(ErrorMessage = "La descripción es requerida")]
+    [AllowHtml]
+    [DataType(DataType.MultilineText)]
+    [DisplayName("Descripción")]
+    public string Description { get; set; }
+    
+    [Required(ErrorMessage = "La fecha es requerida")]
+    [DisplayName("Fecha de la brigada")]
+    public DateTime DateBrigade { get; set; }
+    
+    [Required(ErrorMessage = "El autor es requerido")]
+    [MaxLength(100)]
+    [DisplayName("Coordinador")]
+    public string Author { get; set; }
+    
+    [Required(ErrorMessage = "La imagen es requerida")]
+    [DisplayName("Imagen promocional")]
+    [ValidateExtensionImg]
+    [ImageSizes]
+    public IFormFile CoverPage { get; set; }
+    
+    [DisplayName("Publicar")]
+    public Boolean Statud { get; set; }
+}
+```
+
+## Service Layer
+
+```csharp
+public interface IBrigadeService
+{
+    Task<IEnumerable<Master>> GetAll();
+    Task<Master> GetById(int? id);
+    Task<Master> GetById(string urlMaster);
+    Task<Master> Create(BrigadeCreateDto model);
+    Task DeleteConfirmed(int id);
+    bool BrigadeExists(int id);
+    bool DuplicaName(string name);
+}
+```
+
+## Date Handling
+
+Brigade dates are stored and displayed in Colombian format:
+
+```csharp
+DateBrigade = a.DateBrigade.ToString("MMMM dd, yyyy",
+    CultureInfo.CreateSpecificCulture("es-CO"))
+```
+
+Output examples:
+- "Junio 15, 2024"
+- "Diciembre 03, 2024"
+
+## Display Options
+
+<Tabs>
+  <Tab title="Upcoming Brigades">
+    Filter brigades where `DateBrigade >= DateTime.Now`
+    
+    Shows events that haven't occurred yet, helping citizens plan participation
+  </Tab>
+  
+  <Tab title="Past Brigades">
+    Filter brigades where `DateBrigade < DateTime.Now`
+    
+    Archive of completed events for transparency and documentation
+  </Tab>
+  
+  <Tab title="All Brigades">
+    Default view showing all brigades chronologically
+  </Tab>
+</Tabs>
+
+## Status Management
+
+<CardGroup cols={2}>
+  <Card title="Draft (Statud = false)" icon="file-pen">
+    - Brigade is planned but not announced
+    - Only visible to administrators
+    - Can be refined before publication
+  </Card>
+  
+  <Card title="Published (Statud = true)" icon="bullhorn">
+    - Publicly visible on `/brigadas`
+    - Citizens can view and plan attendance
+    - Should include complete information
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Planning & Scheduling">
+    - Schedule brigades at least 2 weeks in advance
+    - Choose dates that don't conflict with major holidays
+    - Consider weather and seasonal factors
+    - Coordinate with local community leaders
+    - Ensure adequate staff and materials
+  </Accordion>
+  
+  <Accordion title="Communication">
+    - Publish brigade details early
+    - Include clear, specific information
+    - Provide multiple contact methods
+    - Update status if plans change
+    - Follow up with results/photos after event
+  </Accordion>
+  
+  <Accordion title="Documentation">
+    - Take photos during brigades (with permission)
+    - Record number of families served
+    - Document services provided
+    - Collect citizen feedback
+    - Create follow-up blog posts
+  </Accordion>
+</AccordionGroup>
+
+## Future Enhancements
+
+<Note>
+  Consider adding:
+  - Online registration for attendance tracking
+  - Photo galleries from completed brigades
+  - Citizen testimonials and feedback
+  - Integration with employee assignments
+  - Service impact metrics (families served, repairs completed)
+  - Email notifications for upcoming brigades
+</Note>
+
+## Related Features
+
+- [Blog System](/features/blog-system) - Announce brigades and share results
+- [Employee Management](/features/employee-management) - Assign coordinators
+- [Product Catalog](/features/product-catalog) - Reference services offered

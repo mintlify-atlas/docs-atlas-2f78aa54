@@ -1,0 +1,603 @@
+---
+title: Controllers
+description: API Controller reference for ESP Santa Fe de Antioquia
+---
+
+This page documents all API controllers in the ESP Santa Fe de Antioquia application. Controllers handle HTTP requests and coordinate between the presentation layer and service layer.
+
+## BiddingParticipantsController
+
+Manages bidding participants and proposals for public procurement processes.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/BiddingParticipants`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context for direct queries
+</ParamField>
+
+<ParamField path="_biddingParticipantService" type="IBiddingParticipantService">
+  Service layer for bidding participant operations
+</ParamField>
+
+<ParamField path="_nacionLicitante" type="INacionLicitanteService">
+  Service for managing bidding announcements
+</ParamField>
+
+### Actions
+
+#### Index
+
+Retrieves all bidding participants with their associated announcements.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` or `Admin` role
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  View with collection of `ModelViewBiddingParticipant`
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Index()
+```
+
+#### Details (by ID)
+
+Retrieves detailed information about a specific bidding participant.
+
+<ParamField path="id" type="int?" required>
+  Unique identifier of the bidding participant
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  View with `ModelViewBiddingParticipant` or NotFound
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin,UserApp")]
+public async Task<IActionResult> Details(int? id)
+```
+
+#### Details (by Reference)
+
+Retrieves participant details using a unique reference code.
+
+<ParamField path="reference" type="string" required>
+  GUID reference code for the participant
+</ParamField>
+
+<ResponseField name="route" type="string">
+  `/convocatorias/reference/{reference}`
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin,UserApp")]
+[Route("convocatorias/reference/{reference}")]
+public async Task<IActionResult> Details(string reference)
+```
+
+#### Create (GET)
+
+Displays the form to register a new bidding participant.
+
+<ParamField query="idConvocatoria" type="int" required>
+  ID of the announcement/convocatoria
+</ParamField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin,UserApp")]
+public async Task<IActionResult> Create(int idConvocatoria)
+```
+
+#### Create (POST)
+
+Registers a new bidding participant with proposal document.
+
+<ParamField body="model" type="BiddingParticipantCreateDTO" required>
+  Participant data including proposal PDF
+</ParamField>
+
+<ResponseField name="validations" type="object">
+  <Expandable title="validations">
+    - Checks for duplicate identification/NIT numbers
+    - Validates PDF upload (max 10MB)
+    - Generates unique GUID reference
+    - Sends confirmation emails
+  </Expandable>
+</ResponseField>
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+[Authorize(Roles = "SuperAdmin,Admin,UserApp")]
+public async Task<IActionResult> Create(BiddingParticipantCreateDTO model)
+```
+
+#### Delete
+
+Removes a bidding participant and their proposal file.
+
+<ParamField path="id" type="int" required>
+  Participant ID to delete
+</ParamField>
+
+<ResponseField name="authorization" type="string">
+  Requires `SuperAdmin` or `Admin` role
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+[HttpPost, ActionName("Delete")]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> DeleteConfirmed(int id)
+```
+
+---
+
+## BlogController
+
+Manages blog posts and news articles.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/Blog`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context
+</ParamField>
+
+<ParamField path="_blogService" type="IBlogService">
+  Service layer for blog operations
+</ParamField>
+
+### Actions
+
+#### Index
+
+Lists all blog posts for admin management.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` or `Admin` role
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  View with collection of `ModelViewBlog`
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Index()
+```
+
+#### Notice
+
+Public-facing paginated news listing.
+
+<ParamField query="page" type="int?">
+  Page number for pagination (default: 1)
+</ParamField>
+
+<ResponseField name="route" type="string">
+  `/noticias`
+</ResponseField>
+
+<ResponseField name="pageSize" type="int">
+  6 posts per page
+</ResponseField>
+
+```csharp
+[Route("noticias")]
+[AllowAnonymous]
+public async Task<IActionResult> Notice(int? page)
+```
+
+#### Details (by URL)
+
+Displays a single blog post to public users.
+
+<ParamField path="urlBlog" type="string" required>
+  URL-friendly slug of the blog post
+</ParamField>
+
+<ResponseField name="route" type="string">
+  `/noticias/{urlBlog}`
+</ResponseField>
+
+```csharp
+[Route("noticias/{urlBlog}")]
+[AllowAnonymous]
+public async Task<IActionResult> Details(string urlBlog)
+```
+
+#### Create
+
+Creates a new blog post with cover image.
+
+<ParamField body="model" type="BlogCreateDto" required>
+  Blog post data
+</ParamField>
+
+<ResponseField name="validations" type="object">
+  <Expandable title="validations">
+    - Checks for duplicate blog names
+    - Generates URL-friendly slug
+    - Validates image upload (JPG, JPEG, GIF, PNG, max 2MB)
+    - Sets creation timestamp
+  </Expandable>
+</ResponseField>
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Create(BlogCreateDto model)
+```
+
+#### Edit
+
+Updates an existing blog post.
+
+<ParamField path="id" type="int" required>
+  Blog post ID
+</ParamField>
+
+<ParamField body="model" type="BlogEditDto" required>
+  Updated blog data
+</ParamField>
+
+<ResponseField name="note" type="string">
+  Cover page update is optional; existing image retained if not provided
+</ResponseField>
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Edit(int id, BlogEditDto model)
+```
+
+---
+
+## CategoriesController
+
+Manages service categories for the organization.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/Categories`
+
+### Dependencies
+
+<ParamField path="_categoryService" type="ICategoryService">
+  Service layer for category operations
+</ParamField>
+
+### Actions
+
+#### Index
+
+Lists all categories.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` role
+</ParamField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin")]
+public async Task<IActionResult> Index()
+```
+
+#### Details (by Name)
+
+Displays category details to public users.
+
+<ParamField path="nameCategory" type="string" required>
+  URL-friendly category name
+</ParamField>
+
+<ResponseField name="route" type="string">
+  `/servicios/{nameCategory}`
+</ResponseField>
+
+```csharp
+[Route("servicios/{nameCategory}")]
+public async Task<IActionResult> Details(string nameCategory)
+```
+
+#### Create
+
+Creates a new service category.
+
+<ParamField body="model" type="CategoryCreateDto" required>
+  Category data with cover image
+</ParamField>
+
+<ResponseField name="validations" type="object">
+  <Expandable title="validations">
+    - Validates unique category name
+    - Generates URL slug from name
+    - Validates image format and size
+    - No special characters in name (regex validated)
+  </Expandable>
+</ResponseField>
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Create(CategoryCreateDto model)
+```
+
+---
+
+## DocumentsController
+
+Manages legal documents and file uploads.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/Documents`
+
+### Dependencies
+
+<ParamField path="_documentService" type="IDocumentService">
+  Service layer for document operations
+</ParamField>
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context for dropdown population
+</ParamField>
+
+### Actions
+
+#### Document
+
+Public listing of all legal documents.
+
+<ParamField query="route" type="string">
+  `/documentos-legales`
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  View with collection of documents including associated files
+</ResponseField>
+
+```csharp
+[Route("documentos-legales")]
+public async Task<IActionResult> Document()
+```
+
+#### Details (by URL)
+
+Displays document details with downloadable files.
+
+<ParamField path="urlName" type="string" required>
+  URL-friendly document identifier
+</ParamField>
+
+<ResponseField name="route" type="string">
+  `/documentos-legales/{urlName}`
+</ResponseField>
+
+<ResponseField name="includes" type="array">
+  Returns document with collection of FileDocument objects
+</ResponseField>
+
+```csharp
+[Route("documentos-legales/{urlName}")]
+public async Task<IActionResult> Details(string urlName)
+```
+
+#### Create
+
+Creates a new document with multiple file uploads.
+
+<ParamField body="model" type="DocumentCreateDTO" required>
+  Document metadata and files
+</ParamField>
+
+<ResponseField name="features" type="object">
+  <Expandable title="features">
+    - Supports multiple PDF file uploads
+    - Associates document with Master/Licitante if specified
+    - Transaction-based creation (rollback on error)
+    - URL-friendly slug generation
+  </Expandable>
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Create(DocumentCreateDTO model)
+```
+
+#### PublicDocuments
+
+Serves PDF files for download.
+
+<ParamField query="routeFile" type="string" required>
+  File path within filesDocuments directory
+</ParamField>
+
+<ResponseField name="return" type="FileResult">
+  PDF file with application/pdf content type
+</ResponseField>
+
+```csharp
+[AllowAnonymous]
+[ActionName("documentos-publicos")]
+public FileResult PublicDocuments(string routeFile)
+```
+
+---
+
+## ProductsController
+
+Manages service products offered by the organization.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`
+
+### Actions
+
+#### ListProducts
+
+Public listing of all available services/products.
+
+<ParamField query="route" type="string">
+  `/servicios`
+</ParamField>
+
+```csharp
+[Route("servicios")]
+public async Task<IActionResult> ListProducts()
+```
+
+#### Create
+
+Adds a new product/service.
+
+<ParamField body="model" type="ProductCreateDto" required>
+  Product data including icon and description
+</ParamField>
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Create(ProductCreateDto model)
+```
+
+---
+
+## PQRSDsController
+
+Handles PQRSD (Petitions, Complaints, Claims, Suggestions, and Congratulations) requests.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`
+
+### Dependencies
+
+<ParamField path="_iPQSDService" type="IPQRSDService">
+  Service layer for PQRSD operations
+</ParamField>
+
+### Actions
+
+#### Index
+
+Lists all PQRSD submissions for admin review.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` or `Admin` role
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  Collection showing submission status and type
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public IActionResult Index()
+```
+
+#### Create
+
+Public form for submitting PQRSD requests.
+
+<ParamField query="route" type="string">
+  `/formular-pqrsd`
+</ParamField>
+
+<ParamField body="model" type="PQRSDCreateDto" required>
+  Citizen request data
+</ParamField>
+
+<ResponseField name="return" type="Guid">
+  Returns unique reference code via TempData
+</ResponseField>
+
+```csharp
+[Route("formular-pqrsd")]
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Create(PQRSDCreateDto model)
+```
+
+#### Review
+
+Administrative response to a PQRSD submission.
+
+<ParamField body="model" type="ReviewCreateDto" required>
+  Admin response and resolution
+</ParamField>
+
+<ResponseField name="updates" type="object">
+  <Expandable title="updates">
+    - Marks PQRSD as answered
+    - Records answer date
+    - Stores admin reply
+  </Expandable>
+</ResponseField>
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+public IActionResult Review(ReviewCreateDto model)
+```
+
+#### Details
+
+View full PQRSD details including response if available.
+
+<ParamField path="id" type="Guid?" required>
+  Unique PQRSD identifier
+</ParamField>
+
+<ResponseField name="return" type="ModelViewPQRSD">
+  Complete request and response information
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public IActionResult Details(Guid? id)
+```
+
+---
+
+## Common Patterns
+
+### Authorization
+
+Most controllers use role-based authorization:
+
+<ParamField name="SuperAdmin" type="role">
+  Full system access
+</ParamField>
+
+<ParamField name="Admin" type="role">
+  Administrative access to most resources
+</ParamField>
+
+<ParamField name="UserApp" type="role">
+  Limited access for application users
+</ParamField>
+
+### Anti-Forgery Protection
+
+All POST actions use `[ValidateAntiForgeryToken]` to prevent CSRF attacks.
+
+### Date Formatting
+
+Dates are formatted using Spanish Colombian culture:
+
+```csharp
+DateCreate.ToString("MMMM dd, yyyy", CultureInfo.CreateSpecificCulture("es-CO"))
+```
+
+### File Handling
+
+File uploads are processed through `IUploadedFileIIS` service with validation:
+- Images: JPG, JPEG, GIF, PNG (max 2MB)
+- PDFs: PDF format (max 10MB)

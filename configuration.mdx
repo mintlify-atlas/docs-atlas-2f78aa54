@@ -1,0 +1,408 @@
+---
+title: 'Configuration'
+description: 'Configure database, authentication, email, and file upload settings'
+---
+
+## Overview
+
+ESP Santa Fe de Antioquia uses a combination of `appsettings.json` configuration and `Startup.cs` service registration to configure the application. This guide covers all essential configuration areas.
+
+## Database Configuration
+
+### Connection String
+
+The database connection is configured in `appsettings.json`:
+
+```json appsettings.json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=JHOTAMS;Database=BDESPSantaFeAnt;Trusted_Connection=True;MultipleActiveResultSets=true"
+  }
+}
+```
+
+<Note>
+  **MultipleActiveResultSets=true** is required for Entity Framework Core to handle multiple queries simultaneously.
+</Note>
+
+### Connection String Formats
+
+<CodeGroup>
+```txt Windows Authentication
+Server=localhost;Database=BDESPSantaFeAnt;Trusted_Connection=True;MultipleActiveResultSets=true
+```
+
+```txt SQL Authentication
+Server=localhost;Database=BDESPSantaFeAnt;User Id=sa;Password=YourPassword;MultipleActiveResultSets=true
+```
+
+```txt LocalDB
+Server=(localdb)\\mssqllocaldb;Database=BDESPSantaFeAnt;Trusted_Connection=True;MultipleActiveResultSets=true
+```
+
+```txt Azure SQL
+Server=tcp:yourserver.database.windows.net,1433;Database=BDESPSantaFeAnt;User ID=yourusername;Password=yourpassword;Encrypt=True;TrustServerCertificate=False;
+```
+</CodeGroup>
+
+### DbContext Registration
+
+The `ApplicationDbContext` is registered in `Startup.cs:prjESPSantaFeAnt:28-30`:
+
+```csharp Startup.cs
+services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(
+        Configuration.GetConnectionString("DefaultConnection")));
+```
+
+The context manages the following entities:
+- Categories, Products, Employees
+- Documents, FileDocuments
+- PQRSD (complaints and suggestions)
+- BiddingParticipants, Masters
+- ASP.NET Identity tables
+
+## Authentication & Identity
+
+### Identity Configuration
+
+ASP.NET Core Identity is configured in `Startup.cs:prjESPSantaFeAnt:32-35`:
+
+```csharp Startup.cs
+services.AddIdentity<IdentityUser, IdentityRole>(
+    options => options.SignIn.RequireConfirmedAccount = true)
+   .AddEntityFrameworkStores<ApplicationDbContext>()
+   .AddDefaultTokenProviders();
+```
+
+<Warning>
+  **RequireConfirmedAccount = true** requires users to confirm their email before signing in. Ensure SendGrid is configured for email confirmation to work.
+</Warning>
+
+### Password Policy
+
+Password requirements are defined in `Startup.cs:prjESPSantaFeAnt:42-50`:
+
+```csharp Startup.cs
+services.Configure<IdentityOptions>(options =>
+{
+    // Password settings
+    options.Password.RequireDigit = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = true;
+    options.Password.RequiredLength = 4;
+    options.Password.RequiredUniqueChars = 0;
+});
+```
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `RequireDigit` | `false` | Numbers are optional |
+| `RequireLowercase` | `false` | Lowercase letters are optional |
+| `RequireNonAlphanumeric` | `false` | Special characters are optional |
+| `RequireUppercase` | `true` | At least one uppercase letter required |
+| `RequiredLength` | `4` | Minimum 4 characters |
+| `RequiredUniqueChars` | `0` | No unique character requirement |
+
+<Note>
+  For production environments, consider strengthening these password requirements to improve security.
+</Note>
+
+### Account Lockout
+
+Lockout policy is configured in `Startup.cs:prjESPSantaFeAnt:52-55`:
+
+```csharp Startup.cs
+// Lockout settings
+options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+options.Lockout.MaxFailedAccessAttempts = 5;
+options.Lockout.AllowedForNewUsers = true;
+```
+
+Accounts are locked for **5 minutes** after **5 failed login attempts**.
+
+### User Settings
+
+Allowed username characters are defined in `Startup.cs:prjESPSantaFeAnt:57-60`:
+
+```csharp Startup.cs
+// User settings
+options.User.AllowedUserNameCharacters =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
+options.User.RequireUniqueEmail = false;
+```
+
+### Cookie Configuration
+
+Authentication cookies are configured in `Startup.cs:prjESPSantaFeAnt:63-72`:
+
+```csharp Startup.cs
+services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.HttpOnly = true;
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(180);
+    options.LoginPath = "/Identity/Account/Login";
+    options.AccessDeniedPath = "/Identity/Account/AccessDenied";
+    options.SlidingExpiration = true;
+});
+```
+
+- **Session Duration**: 180 minutes (3 hours)
+- **HttpOnly**: Cookies are not accessible via JavaScript
+- **SlidingExpiration**: Session extends on activity
+
+### Token Lifetime
+
+Email confirmation and password reset tokens expire after **7 days** (`Startup.cs:prjESPSantaFeAnt:38-39`):
+
+```csharp Startup.cs
+services.Configure<DataProtectionTokenProviderOptions>(o =>
+    o.TokenLifespan = TimeSpan.FromDays(7));
+```
+
+## Email Configuration (SendGrid)
+
+### SendGrid API Key
+
+Configure your SendGrid API key in `appsettings.json`:
+
+```json appsettings.json
+{
+  "ConnectionStrings": {
+    "SendGrid_api_key": "SG.your-api-key-here"
+  }
+}
+```
+
+<Warning>
+  **Never commit your SendGrid API key to source control!** Use environment variables or Azure Key Vault for production.
+</Warning>
+
+### Email Service Implementation
+
+The email service is registered in `Startup.cs:prjESPSantaFeAnt:88`:
+
+```csharp Startup.cs
+services.AddTransient<IEmailSendGrid, EmailSendGrid>();
+```
+
+Implementation from `EmailSendGrid.cs:services/Commons:15-45`:
+
+```csharp EmailSendGrid.cs
+public class EmailSendGrid : IEmailSendGrid
+{
+    private readonly string _configuration;
+
+    public EmailSendGrid(IConfiguration configuration)
+    {
+        _configuration = configuration.GetConnectionString("SendGrid_api_key");
+    }
+
+    public Task Execute(string subject, string message, string email)
+    {
+        var client = new SendGridClient(_configuration);
+        var msg = new SendGridMessage()
+        {
+            From = new EmailAddress("espsantafedeantioquiasoporte@gmail.com", subject),
+            Subject = subject,
+            PlainTextContent = message,
+            HtmlContent = message,
+        };
+        msg.AddTo(new EmailAddress(email));
+        msg.SetClickTracking(false, false);
+        
+        return client.SendEmailAsync(msg);
+    }
+}
+```
+
+### Get a SendGrid API Key
+
+<Steps>
+  <Step title="Create SendGrid Account">
+    Sign up for a free account at [SendGrid](https://sendgrid.com/)
+  </Step>
+  
+  <Step title="Create API Key">
+    1. Navigate to **Settings** > **API Keys**
+    2. Click **Create API Key**
+    3. Choose **Full Access** or **Restricted Access**
+    4. Copy the generated API key
+  </Step>
+  
+  <Step title="Configure Application">
+    Add the API key to your `appsettings.json`:
+    ```json
+    "SendGrid_api_key": "SG.YOUR_ACTUAL_API_KEY"
+    ```
+  </Step>
+</Steps>
+
+### Email Settings
+
+- **From Address**: `espsantafedeantioquiasoporte@gmail.com`
+- **Click Tracking**: Disabled for security
+- **Supports**: Plain text and HTML content
+
+## File Upload Configuration
+
+### File Upload Service
+
+The file upload service is registered in `Startup.cs:prjESPSantaFeAnt:86`:
+
+```csharp Startup.cs
+services.AddTransient<IUploadedFileIIS, UploadedFileIIS>();
+```
+
+### Upload Implementation
+
+Files are stored in the `wwwroot/images` directory, organized by account/category (`UploadedFileIIS.cs:services/Commons:30-43`):
+
+```csharp UploadedFileIIS.cs
+public string UploadedFileImage(IFormFile file, string account)
+{
+    string uploadsFolder = Path.Combine(_hostingEnvironment.WebRootPath, "images\\" + account);
+    string uniqueFileName = "images-" + Guid.NewGuid().ToString() + "." + Path.GetExtension(file.FileName).Substring(1);
+    string filePath = Path.Combine(uploadsFolder, uniqueFileName);
+    
+    using (var fileStream = new FileStream(filePath, FileMode.Create))
+    {
+        file.CopyTo(fileStream);
+    }
+    
+    return uniqueFileName;
+}
+```
+
+### Storage Structure
+
+```
+wwwroot/
+└── images/
+    ├── employees/       # Employee photos
+    ├── products/        # Product images
+    ├── documents/       # Document files
+    ├── blog/           # Blog post images
+    └── brigades/       # Brigade photos
+```
+
+### File Upload Features
+
+- **Unique Names**: Files are renamed with GUIDs to prevent conflicts
+- **Multiple Uploads**: Supports batch file uploads
+- **Cover Images**: Special handling for cover/featured images
+- **File Deletion**: Automatic cleanup when entities are deleted
+
+<Warning>
+  Ensure the application has write permissions to the `wwwroot/images` directory. Create subdirectories manually if deploying to IIS.
+</Warning>
+
+## Service Registration
+
+All application services are registered in `Startup.cs:prjESPSantaFeAnt:76-88`:
+
+```csharp Startup.cs
+services.AddTransient<ICategoryService, CategoryService>();
+services.AddTransient<INacionLicitanteService, NacionLicitanteService>();
+services.AddTransient<IBiddingParticipantService, BiddingParticipantService>();
+services.AddTransient<IDocumentService, DocumentService>();
+services.AddTransient<IBlogService, BlogService>();
+services.AddTransient<IPQRSDService, PQRSDService>();
+services.AddTransient<IBrigadeService, BrigadeService>();
+services.AddTransient<IProductService, ProductService>();
+services.AddTransient<IEmployeeService, EmployeeService>();
+
+services.AddTransient<IUploadedFileIIS, UploadedFileIIS>();
+services.AddTransient<IFormatStringUrl, FormatStringUrl>();
+services.AddTransient<IEmailSendGrid, EmailSendGrid>();
+```
+
+<Note>
+  All services use **Transient** lifetime, meaning a new instance is created for each request.
+</Note>
+
+## AutoMapper Configuration
+
+AutoMapper is registered in `Startup.cs:prjESPSantaFeAnt:74`:
+
+```csharp Startup.cs
+services.AddAutoMapper(typeof(Startup));
+```
+
+AutoMapper automatically discovers mapping profiles in the assembly for DTO conversions.
+
+## Logging Configuration
+
+Logging levels are configured in `appsettings.json`:
+
+```json appsettings.json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  }
+}
+```
+
+| Category | Level | Description |
+|----------|-------|-------------|
+| `Default` | `Information` | General application logs |
+| `Microsoft` | `Warning` | Framework logs (reduced verbosity) |
+| `Microsoft.Hosting.Lifetime` | `Information` | Startup/shutdown events |
+
+## Environment-Specific Settings
+
+### Development
+
+In development, additional debugging is enabled (`Startup.cs:prjESPSantaFeAnt:103-107`):
+
+```csharp Startup.cs
+if (env.IsProduction())
+{
+    app.UseDeveloperExceptionPage();
+    app.UseDatabaseErrorPage();
+}
+```
+
+<Note>
+  The code appears to have inverted logic - it shows developer pages in production. This should be reviewed for production deployments.
+</Note>
+
+### Production
+
+For production deployments:
+
+1. Use **environment variables** for sensitive configuration
+2. Enable **HTTPS redirection** (enabled by default)
+3. Configure **HSTS** headers
+4. Use **Azure Key Vault** or similar for secrets
+
+## URL Configuration
+
+Custom URLs can be configured in `Program.cs:prjESPSantaFeAnt:24`:
+
+```csharp Program.cs
+// Uncomment to use custom URLs
+webBuilder.UseUrls("http://localhost:5024", "http://192.164.1.106:5024");
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture/overview">
+    Understand the application structure
+  </Card>
+  <Card title="Database Schema" icon="database" href="/architecture/database-schema">
+    Explore the data model
+  </Card>
+  <Card title="Authentication" icon="lock" href="/architecture/authentication">
+    Learn about the security architecture
+  </Card>
+  <Card title="Services Layer" icon="layer-group" href="/architecture/services-layer">
+    Dive into business logic
+  </Card>
+</CardGroup>

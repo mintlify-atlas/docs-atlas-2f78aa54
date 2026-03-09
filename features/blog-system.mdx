@@ -1,0 +1,495 @@
+---
+title: 'Blog & News System'
+description: 'Content management for news, announcements, and organizational updates'
+icon: 'newspaper'
+---
+
+## Overview
+
+The Blog System powers ESP Santa Fe de Antioquia's news and announcements platform. This content management feature enables administrators to publish articles, news updates, and organizational announcements that keep citizens informed about events, services, and developments.
+
+<Card title="Public Communication" icon="bullhorn">
+  This system serves as the primary channel for communicating news, updates, service announcements, and community events to citizens.
+</Card>
+
+## User Workflows
+
+<Steps>
+  <Step title="Admin Creates Article">
+    Administrators create new blog posts with:
+    - Article title
+    - Rich HTML content
+    - Author name
+    - Featured image
+    - Publication status (draft or published)
+  </Step>
+  
+  <Step title="Content Review">
+    Posts can be saved as drafts (Status = false) for review before publication
+  </Step>
+  
+  <Step title="Publication">
+    Setting Status to true makes the article visible on the public news page at `/noticias`
+  </Step>
+  
+  <Step title="Public Access">
+    Citizens browse articles at `/noticias` and read full content at `/noticias/{urlBlog}`
+  </Step>
+</Steps>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Rich Content Editor" icon="pen-fancy">
+    HTML-based content editing for formatted text, lists, and embedded media
+  </Card>
+  
+  <Card title="Draft System" icon="file-pen">
+    Save unpublished drafts and control when content goes live
+  </Card>
+  
+  <Card title="Featured Images" icon="image">
+    Eye-catching cover photos for each article
+  </Card>
+  
+  <Card title="Pagination" icon="list-ol">
+    6 articles per page for optimal browsing experience
+  </Card>
+  
+  <Card title="SEO-Friendly URLs" icon="link">
+    Automatic URL generation from article titles
+  </Card>
+  
+  <Card title="Update Tracking" icon="clock">
+    Track creation and modification dates
+  </Card>
+</CardGroup>
+
+## Data Model
+
+The blog system uses the Master entity with specific flags:
+
+```csharp
+public class Master
+{
+    public int Id { get; set; }                    // Primary key
+    public string NameMaster { get; set; }         // Article title
+    public string UrlMaster { get; set; }          // URL-friendly slug
+    public string Description { get; set; }        // HTML content
+    public string CoverPage { get; set; }          // Featured image path
+    public string Author { get; set; }             // Author name
+    public Boolean Statud { get; set; }            // Published status
+    public Boolean Blog { get; set; }              // Flag: true for blog posts
+    public DateTime DateCreate { get; set; }       // Publication date
+    public DateTime DateUpdate { get; set; }       // Last modified date
+}
+```
+
+### View Model
+
+```csharp
+public class ModelViewBlog
+{
+    public int Id { get; set; }
+    public string NameBlog { get; set; }           // Article title
+    public string UrlMaster { get; set; }          // URL slug
+    public string Description { get; set; }        // Full HTML content
+    public string CoverPage { get; set; }          // Image path
+    public Boolean Statud { get; set; }            // Published/Draft
+    public string Author { get; set; }             // Author name
+    public string DateCreate { get; set; }         // Formatted date
+    public string DateUpdate { get; set; }         // Formatted update date
+}
+```
+
+## Controller Actions
+
+### Admin Routes
+
+<Accordion title="List Articles - GET /Blog">
+  **Purpose**: Display all blog posts in admin dashboard
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - Shows both published and draft articles
+  - Displays creation and update dates
+  - Status indicators (published/draft)
+  - Quick access to edit and delete
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Index()
+  {
+      var _model = from a in await _blogService.GetAll()
+                   select new ModelViewBlog
+                   {
+                       Id = a.Id,
+                       NameBlog = a.NameMaster,
+                       UrlMaster = a.UrlMaster,
+                       Author = a.Author,
+                       DateCreate = a.DateCreate.ToString("MMM dd, yyyy",
+                           CultureInfo.CreateSpecificCulture("es-CO")),
+                       DateUpdate = a.DateUpdate.ToString("MMM dd, yyyy",
+                           CultureInfo.CreateSpecificCulture("es-CO")),
+                       Statud = a.Statud
+                   };
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Create Article - GET/POST /Blog/Create">
+  **Purpose**: Create new blog post
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Validation**:
+  - Checks for duplicate titles
+  - Validates required fields
+  - Ensures image file meets requirements
+  
+  ```csharp
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Create(BlogCreateDto model)
+  {
+      var _urlName = _blogService.DuplicaName(model.NameBlog);
+
+      if (_urlName)
+      {
+          ViewData["DuplicaName"] = $"El Nombre {model.NameBlog} ya ha sido utilizado, cambielo";
+          return View(model);
+      }
+
+      if (ModelState.IsValid)
+      {
+          var result = await _blogService.Create(model);
+          return RedirectToAction(nameof(Index));
+      }
+
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Edit Article - GET/POST /Blog/Edit/{id}">
+  **Purpose**: Update existing blog post
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Updatable Fields**:
+  - Title (NameBlog)
+  - Content (Description)
+  - Author
+  - Status (publish/unpublish)
+  - Featured image (optional)
+  
+  ```csharp
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Edit(int id, BlogEditDto model)
+  {
+      if (id != model.Id)
+      {
+          return NotFound();
+      }
+
+      if (ModelState.IsValid)
+      {
+          try
+          {
+              await _blogService.Edit(id, model);
+          }
+          catch (DbUpdateConcurrencyException)
+          {
+              if (!MasterExists(model.Id))
+              {
+                  return NotFound();
+              }
+              else
+              {
+                  throw;
+              }
+          }
+          return RedirectToAction(nameof(Index));
+      }
+
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="View Details (Admin) - GET /Blog/Details/{id}">
+  **Purpose**: Preview article as admin
+  
+  **Access**: SuperAdmin, Admin
+  
+  Displays full article with all metadata including unpublished status.
+</Accordion>
+
+<Accordion title="Delete Article - GET/POST /Blog/Delete/{id}">
+  **Purpose**: Remove blog post permanently
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Warning**: Deletion is permanent and cannot be undone.
+</Accordion>
+
+### Public Routes
+
+<Accordion title="News Listing - GET /noticias">
+  **Purpose**: Display paginated list of published articles
+  
+  **Access**: Public
+  
+  **Features**:
+  - Shows only published articles (Statud = true)
+  - 6 articles per page
+  - Displays featured images, titles, authors, and dates
+  - Pagination controls
+  
+  ```csharp
+  [Route("noticias")]
+  [AllowAnonymous]
+  public async Task<IActionResult> Notice(int? page)
+  {
+      var _model = from a in await _blogService.GetAll()
+                   where a.Statud == true
+                   select new ModelViewBlog
+                   {
+                       Id = a.Id,
+                       NameBlog = a.NameMaster,
+                       UrlMaster = a.UrlMaster,
+                       CoverPage = a.CoverPage,
+                       Author = a.Author,
+                       DateCreate = a.DateCreate.ToString("MMM dd, yyyy",
+                           CultureInfo.CreateSpecificCulture("es-CO")),
+                       Statud = a.Statud
+                   };
+
+      var pageNumber = page ?? 1;
+      int pageSize = 6;
+      var onePageOfStudents = _model.ToPagedList(pageNumber, pageSize);
+      return View(onePageOfStudents);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Article Detail - GET /noticias/{urlBlog}">
+  **Purpose**: Display full article content
+  
+  **Access**: Public
+  
+  **Features**:
+  - SEO-friendly URL using article title slug
+  - Full HTML content rendering
+  - Featured image display
+  - Author and date information
+  - Social sharing capabilities (if implemented in view)
+  
+  ```csharp
+  [Route("noticias/{urlBlog}")]
+  [AllowAnonymous]
+  public async Task<IActionResult> Details(string urlBlog)
+  {
+      if (urlBlog == "")
+      {
+          return NotFound();
+      }
+
+      var _blog = await _blogService.GetById(urlBlog);
+
+      if (_blog == null)
+      {
+          return NotFound();
+      }
+
+      var _model = new ModelViewBlog
+      {
+          Id = _blog.Id,
+          NameBlog = _blog.NameMaster,
+          UrlMaster = _blog.UrlMaster,
+          Description = _blog.Description,
+          Author = _blog.Author,
+          CoverPage = _blog.CoverPage,
+          Statud = _blog.Statud,
+          DateCreate = _blog.DateCreate.ToString("MMMM dd, yyyy",
+              CultureInfo.CreateSpecificCulture("es-CO")),
+          DateUpdate = _blog.DateUpdate.ToString("MMMM dd, yyyy",
+              CultureInfo.CreateSpecificCulture("es-CO"))
+      };
+
+      ViewData["detail"] = false;
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+## Content Creation Guidelines
+
+<AccordionGroup>
+  <Accordion title="Writing Best Practices">
+    - Use clear, concise headlines
+    - Start with the most important information
+    - Keep paragraphs short (2-4 sentences)
+    - Use subheadings to organize content
+    - Include relevant images and captions
+    - Proofread before publishing
+  </Accordion>
+  
+  <Accordion title="SEO Optimization">
+    - Choose descriptive titles (50-60 characters)
+    - Use keywords naturally in content
+    - Add alt text to images
+    - Keep URLs short and descriptive
+    - Use proper heading hierarchy (H1, H2, H3)
+  </Accordion>
+  
+  <Accordion title="Image Requirements">
+    - Format: JPG or PNG
+    - Recommended size: 1200x630 pixels (Facebook/OG standard)
+    - Maximum file size: 2MB
+    - Compress images for web
+    - Use descriptive filenames
+  </Accordion>
+</AccordionGroup>
+
+## Data Transfer Objects
+
+### Create DTO
+
+```csharp
+public class BlogCreateDto
+{
+    [Required(ErrorMessage = "El título es requerido")]
+    [MaxLength(200)]
+    [DisplayName("Título")]
+    public string NameBlog { get; set; }
+    
+    [Required(ErrorMessage = "El contenido es requerido")]
+    [AllowHtml]
+    [DataType(DataType.MultilineText)]
+    [DisplayName("Contenido")]
+    public string Description { get; set; }
+    
+    [Required(ErrorMessage = "El autor es requerido")]
+    [MaxLength(100)]
+    [DisplayName("Autor")]
+    public string Author { get; set; }
+    
+    [Required(ErrorMessage = "La imagen es requerida")]
+    [DisplayName("Imagen destacada")]
+    [ValidateExtensionImg]
+    [ImageSizes]
+    public IFormFile CoverPage { get; set; }
+    
+    [DisplayName("Publicar")]
+    public Boolean Statud { get; set; }
+}
+```
+
+### Edit DTO
+
+```csharp
+public class BlogEditDto
+{
+    public int Id { get; set; }
+    public string NameBlog { get; set; }
+    public string UrlMaster { get; set; }      // Read-only, generated from title
+    public string Description { get; set; }
+    public string Author { get; set; }
+    public Boolean Statud { get; set; }
+    public IFormFile CoverPage { get; set; }  // Optional on edit
+}
+```
+
+## Pagination
+
+The system uses X.PagedList for efficient pagination:
+
+```csharp
+var pageNumber = page ?? 1;              // Default to first page
+int pageSize = 6;                        // 6 articles per page
+var onePageOfStudents = _model.ToPagedList(pageNumber, pageSize);
+```
+
+This approach:
+- Improves page load times
+- Reduces database queries
+- Provides better user experience
+- Enables navigation controls (previous/next)
+
+## Status Management
+
+<Tabs>
+  <Tab title="Draft (Statud = false)">
+    - Article is saved but not public
+    - Only visible to administrators
+    - Can be edited and refined
+    - Does not appear in `/noticias` listing
+  </Tab>
+  
+  <Tab title="Published (Statud = true)">
+    - Article is publicly visible
+    - Appears in news listing
+    - Accessible via direct URL
+    - Can still be edited or unpublished
+  </Tab>
+</Tabs>
+
+## Date Formatting
+
+Dates are formatted using Colombian Spanish locale:
+
+```csharp
+CultureInfo.CreateSpecificCulture("es-CO")
+```
+
+Example outputs:
+- Short format: "Ene 15, 2024"
+- Long format: "Enero 15, 2024"
+
+## Service Layer
+
+```csharp
+public interface IBlogService
+{
+    Task<IEnumerable<Master>> GetAll();
+    Task<Master> GetById(int? id);
+    Task<Master> GetById(string urlMaster);
+    Task<Master> Create(BlogCreateDto model);
+    Task Edit(int id, BlogEditDto model);
+    Task DeleteConfirmed(int id);
+    bool BlogExists(int id);
+    bool DuplicaName(string name);
+}
+```
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Service Announcement" icon="bullhorn">
+    Notify citizens about scheduled maintenance, service interruptions, or new service offerings
+  </Card>
+  
+  <Card title="Event Promotion" icon="calendar">
+    Announce community events, public meetings, or educational workshops
+  </Card>
+  
+  <Card title="Project Updates" icon="diagram-project">
+    Share progress on infrastructure projects or organizational initiatives
+  </Card>
+  
+  <Card title="News Coverage" icon="newspaper">
+    Report on organizational achievements, awards, or significant milestones
+  </Card>
+</CardGroup>
+
+## Related Features
+
+- [Employee Management](/features/employee-management) - Reference staff in articles
+- [Brigade Management](/features/brigade-management) - Announce brigade events
+- [Document Management](/features/document-management) - Link to official documents

@@ -1,0 +1,675 @@
+---
+title: Services
+description: Service layer reference for ESP Santa Fe de Antioquia
+---
+
+The service layer encapsulates business logic and data access, providing a clean separation between controllers and data persistence.
+
+## IBiddingParticipantService
+
+Manages bidding participants in public procurement processes.
+
+**Namespace:** `services`  
+**Implementation:** `BiddingParticipantService`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Entity Framework database context
+</ParamField>
+
+<ParamField path="_mapper" type="IMapper">
+  AutoMapper for DTO conversions
+</ParamField>
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  File upload service for IIS
+</ParamField>
+
+<ParamField path="_emailSendGrid" type="IEmailSendGrid">
+  SendGrid email service for notifications
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all bidding participants with related Master data.
+
+```csharp
+Task<IEnumerable<BiddingParticipant>> GetAll()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<BiddingParticipant>>">
+  Collection of all participants with included Master relationship
+</ResponseField>
+
+**Implementation:**
+```csharp
+return await _context.BiddingParticipants
+    .Include(x => x.Master)
+    .ToListAsync();
+```
+
+#### GetById
+
+Retrieves a participant by ID.
+
+<ParamField path="id" type="int?" required>
+  Participant identifier
+</ParamField>
+
+```csharp
+Task<BiddingParticipant> GetById(int? id)
+```
+
+<ResponseField name="return" type="Task<BiddingParticipant>">
+  Participant entity with Master navigation property loaded
+</ResponseField>
+
+#### GetByRef
+
+Retrieves a participant by their unique reference GUID.
+
+<ParamField path="reference" type="string" required>
+  GUID reference code (converted internally)
+</ParamField>
+
+```csharp
+Task<BiddingParticipant> GetByRef(string reference)
+```
+
+<ResponseField name="return" type="Task<BiddingParticipant>">
+  Participant matching the reference code
+</ResponseField>
+
+#### Create
+
+Registers a new bidding participant with proposal file and email notifications.
+
+<ParamField body="model" type="BiddingParticipantCreateDTO" required>
+  Participant data
+</ParamField>
+
+```csharp
+Task<BiddingParticipantDTO> Create(BiddingParticipantCreateDTO model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-process">
+    1. Generate unique GUID reference
+    2. Upload proposal PDF to `filesBiddingParticipant` folder
+    3. Create participant record in database
+    4. Generate HTML email from template
+    5. Send confirmation emails to:
+       - Participant email
+       - asesoria@espsantafedeantioquia.co
+       - gerencia@espsantafedeantioquia.co
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+var participant = await _biddingParticipantService.Create(new BiddingParticipantCreateDTO
+{
+    NaturalPerson = true,
+    Name = "Juan Pérez",
+    IdentificationOrNit = "1234567890",
+    Phone = "6045551234",
+    Cellular = "3001234567",
+    Address = "Calle 10 #20-30",
+    City = "Santa Fe de Antioquia",
+    Email = "juan@example.com",
+    Proposals = proposalPdfFile,
+    MasterId = 5
+});
+```
+
+#### DuplicaIdentificationOrNit
+
+Validates that an identification/NIT is unique within a specific announcement.
+
+<ParamField path="identificationOrNit" type="string" required>
+  ID or tax number to check
+</ParamField>
+
+<ParamField path="masterId" type="int" required>
+  Announcement/convocatoria ID
+</ParamField>
+
+```csharp
+Boolean DuplicaIdentificationOrNit(string identificationOrNit, int masterId)
+```
+
+<ResponseField name="return" type="Boolean">
+  `true` if duplicate exists, `false` if unique
+</ResponseField>
+
+#### DeleteConfirmed
+
+Removes a participant and their uploaded proposal file.
+
+<ParamField path="id" type="int" required>
+  Participant ID to delete
+</ParamField>
+
+```csharp
+Task DeleteConfirmed(int id)
+```
+
+---
+
+## IBlogService
+
+Manages blog posts and news articles.
+
+**Namespace:** `services`  
+**Implementation:** `BlogService`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context
+</ParamField>
+
+<ParamField path="_mapper" type="IMapper">
+  AutoMapper instance
+</ParamField>
+
+<ParamField path="_formatStringUrl" type="IFormatStringUrl">
+  URL slug generation service
+</ParamField>
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  Image upload handler
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all blog posts ordered by creation date.
+
+```csharp
+Task<IEnumerable<Master>> GetAll()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Master>>">
+  Blog entries (Master entities where Blog = true) ordered newest first
+</ResponseField>
+
+**Query:**
+```csharp
+var blogs = await _context.Masters
+    .AsNoTracking()
+    .Where(x => x.Blog == true)
+    .OrderByDescending(x => x.DateCreate)
+    .ToListAsync();
+```
+
+#### LimitHome
+
+Retrieves the 3 most recent blog posts for homepage display.
+
+```csharp
+Task<IEnumerable<Master>> LimitHome()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Master>>">
+  Top 3 newest blog posts
+</ResponseField>
+
+#### GetById (int)
+
+Retrieves a blog post by numeric ID.
+
+<ParamField path="id" type="int?" required>
+  Blog post identifier
+</ParamField>
+
+```csharp
+Task<Master> GetById(int? id)
+```
+
+#### GetById (string)
+
+Retrieves a blog post by URL slug.
+
+<ParamField path="urBlog" type="string" required>
+  URL-friendly blog identifier
+</ParamField>
+
+```csharp
+Task<Master> GetById(string urBlog)
+```
+
+#### Create
+
+Creates a new blog post with cover image.
+
+<ParamField body="model" type="BlogCreateDto" required>
+  Blog post data
+</ParamField>
+
+```csharp
+Task<BlogDto> Create(BlogCreateDto model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-steps">
+    1. Generate URL slug from blog name
+    2. Upload cover image to `blog` folder
+    3. Create Master record with Blog = true
+    4. Set creation timestamp
+    5. Mark as active (Statud = true)
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+var blog = await _blogService.Create(new BlogCreateDto
+{
+    NameBlog = "Nueva Iniciativa 2026",
+    Description = "<p>Contenido HTML del artículo...</p>",
+    Author = "Comunicaciones ESP",
+    CoverPage = imageFile
+});
+// Creates URL: /noticias/nueva-iniciativa-2026
+```
+
+#### Edit
+
+Updates an existing blog post.
+
+<ParamField path="id" type="int" required>
+  Blog post ID
+</ParamField>
+
+<ParamField body="model" type="BlogEditDto" required>
+  Updated content
+</ParamField>
+
+```csharp
+Task Edit(int id, BlogEditDto model)
+```
+
+<ResponseField name="behavior" type="string">
+  If new cover image provided, replaces existing. Otherwise, retains current image.
+</ResponseField>
+
+#### DuplicaName
+
+Checks if a blog name already exists.
+
+<ParamField path="_stringName" type="string" required>
+  Blog name to validate
+</ParamField>
+
+```csharp
+bool DuplicaName(string _stringName)
+```
+
+#### DeleteConfirmed
+
+Deletes a blog post and its cover image.
+
+<ParamField path="id" type="int" required>
+  Blog post ID
+</ParamField>
+
+```csharp
+Task DeleteConfirmed(int id)
+```
+
+---
+
+## ICategoryService
+
+Manages service categories.
+
+**Namespace:** `services`  
+**Implementation:** `CategoryService`
+
+### Methods
+
+#### GetAll
+
+Retrieves all service categories.
+
+```csharp
+Task<IEnumerable<Category>> GetAll()
+```
+
+#### GetById (int)
+
+Retrieves category by numeric ID.
+
+```csharp
+Task<Category> GetById(int? id)
+```
+
+#### GetById (string)
+
+Retrieves category by URL-friendly name.
+
+<ParamField path="nameCategory" type="string" required>
+  URL slug of category
+</ParamField>
+
+```csharp
+Task<Category> GetById(string nameCategory)
+```
+
+#### Create
+
+Creates a new service category.
+
+<ParamField body="model" type="CategoryCreateDto" required>
+  Category data with cover image
+</ParamField>
+
+```csharp
+Task<CategoryDto> Create(CategoryCreateDto model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-steps">
+    1. Generate URL slug from category name
+    2. Upload cover image to `categories` folder
+    3. Trim whitespace from name and description
+    4. Create Category entity
+    5. Save to database
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+var category = await _categoryService.Create(new CategoryCreateDto
+{
+    NameCategory = "Acueducto y Alcantarillado",
+    Description = "<p>Servicios de agua potable...</p>",
+    CoverPage = imageFile,
+    Statud = true
+});
+// Creates URL: /servicios/acueducto-y-alcantarillado
+```
+
+#### Edit
+
+Updates a category.
+
+<ParamField path="id" type="int" required>
+  Category ID
+</ParamField>
+
+<ParamField body="model" type="CategoryEditDto" required>
+  Updated data
+</ParamField>
+
+```csharp
+Task Edit(int id, CategoryEditDto model)
+```
+
+<ResponseField name="note" type="string">
+  Updates DateUpdate timestamp automatically
+</ResponseField>
+
+#### CategoryExists
+
+Validates category existence.
+
+```csharp
+bool CategoryExists(int id)
+```
+
+#### DuplicaName
+
+Checks for duplicate category names.
+
+```csharp
+bool DuplicaName(string _stringName)
+```
+
+---
+
+## IDocumentService
+
+Manages legal documents with multiple file attachments.
+
+**Namespace:** `services`  
+**Implementation:** `DocumentService`
+
+### Dependencies
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  File upload service
+</ParamField>
+
+<ParamField path="_formatStringUrl" type="IFormatStringUrl">
+  URL formatting service
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all documents with their file attachments.
+
+```csharp
+Task<IEnumerable<Document>> GetAll()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Document>>">
+  Documents ordered by creation date (newest first) with FileDocument collection loaded
+</ResponseField>
+
+**Query:**
+```csharp
+return await _context.Documents
+    .Include(x => x.FileDocument)
+    .OrderByDescending(x => x.CreateDate)
+    .ToListAsync();
+```
+
+#### GetById (int)
+
+Retrieves document by ID.
+
+<ParamField path="id" type="int?" required>
+  Document identifier
+</ParamField>
+
+```csharp
+Task<Document> GetById(int? id)
+```
+
+<ResponseField name="return" type="Task<Document>">
+  Document with FileDocument collection
+</ResponseField>
+
+#### GetById (string)
+
+Retrieves document by URL name.
+
+<ParamField path="_urlName" type="string" required>
+  URL-friendly document name
+</ParamField>
+
+```csharp
+Task<Document> GetById(string _urlName)
+```
+
+#### Create
+
+Creates a document with multiple file attachments using database transaction.
+
+<ParamField body="model" type="DocumentCreateDTO" required>
+  Document metadata and files
+</ParamField>
+
+```csharp
+Task Create(DocumentCreateDTO model)
+```
+
+<ResponseField name="transaction" type="object">
+  <Expandable title="transaction-flow">
+    1. Begin database transaction
+    2. Create Document record
+    3. Generate URL slug
+    4. Associate with Master if MasterId provided
+    5. Loop through uploaded files:
+       - Format filename to URL-friendly slug
+       - Upload file to `filesDocuments` folder
+       - Create FileDocument record
+    6. Commit transaction
+    7. Rollback on any exception
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+await _documentService.Create(new DocumentCreateDTO
+{
+    Name = "Plan de Desarrollo 2026",
+    Description = "Documento oficial del plan...",
+    MasterId = 10,
+    RouteFile = new List<IFormFile> { file1, file2, file3 }
+});
+```
+
+#### FilesDocuments
+
+Retrieves all file documents.
+
+```csharp
+Task<IEnumerable<FileDocument>> FilesDocuments()
+```
+
+#### DeleteConfirmed
+
+Deletes a document and all associated files using transaction.
+
+<ParamField path="_id" type="int" required>
+  Document ID
+</ParamField>
+
+```csharp
+Task DeleteConfirmed(int _id)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="deletion-steps">
+    1. Begin transaction
+    2. Load document with FileDocument collection
+    3. Loop through files:
+       - Delete physical file from server
+       - Remove FileDocument record
+    4. Remove Document record
+    5. Commit transaction
+  </Expandable>
+</ResponseField>
+
+#### DocumentExists
+
+Validates document existence.
+
+```csharp
+bool DocumentExists(int id)
+```
+
+#### DuplicaName
+
+Checks for duplicate document names.
+
+```csharp
+bool DuplicaName(string _stringName)
+```
+
+---
+
+## Common Service Utilities
+
+### IFormatStringUrl
+
+Converts text to URL-friendly slugs.
+
+**Example transformations:**
+- "Acueducto y Alcantarillado" → "acueducto-y-alcantarillado"
+- "PQRSD 2026" → "pqrsd-2026"
+- "Noticias: Nueva Obra" → "noticias-nueva-obra"
+
+### IUploadedFileIIS
+
+Handles file operations on IIS server.
+
+<ParamField name="UploadedFileImage" type="method">
+  Uploads file to specified folder, returns filename
+</ParamField>
+
+<ParamField name="DeleteConfirmed" type="method">
+  Removes file from server storage
+</ParamField>
+
+**Storage locations:**
+- `blog/` - Blog cover images
+- `categories/` - Category images
+- `filesBiddingParticipant/` - Proposal PDFs
+- `filesDocuments/` - Legal document files
+
+### IEmailSendGrid
+
+Sends emails via SendGrid API.
+
+```csharp
+Task Execute(string subject, string htmlBody, string recipientEmail)
+```
+
+**Used for:**
+- Bidding participant confirmations
+- PQRSD submission receipts
+- Admin notifications
+
+---
+
+## Service Layer Patterns
+
+### Dependency Injection
+
+All services are registered in `Startup.cs` and injected via constructor:
+
+```csharp
+services.AddScoped<IBiddingParticipantService, BiddingParticipantService>();
+services.AddScoped<IBlogService, BlogService>();
+services.AddScoped<ICategoryService, CategoryService>();
+services.AddScoped<IDocumentService, DocumentService>();
+```
+
+### AutoMapper Usage
+
+DTOs are mapped to entities and vice versa:
+
+```csharp
+var dto = _mapper.Map<BiddingParticipantDTO>(entity);
+var entity = _mapper.Map<BiddingParticipant>(createDto);
+```
+
+### Error Handling
+
+Services with complex operations use transactions:
+
+```csharp
+using var transaction = _context.Database.BeginTransaction();
+try
+{
+    // Operations
+    transaction.Commit();
+}
+catch (Exception ex)
+{
+    transaction.Rollback();
+}
+```
+
+### Async/Await
+
+All database operations are asynchronous for better performance.

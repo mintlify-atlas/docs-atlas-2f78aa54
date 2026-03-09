@@ -1,0 +1,734 @@
+---
+title: Models
+description: Data models and DTOs for ESP Santa Fe de Antioquia
+---
+
+This page documents the data models, entities, and Data Transfer Objects (DTOs) used throughout the application.
+
+## Domain Models
+
+### BiddingParticipant
+
+Represents participants in public procurement bidding processes.
+
+**Namespace:** `model`  
+**Table:** `BiddingParticipants`
+
+<ParamField path="Id" type="int">
+  Primary key
+</ParamField>
+
+<ParamField path="Ref" type="Guid">
+  Unique reference code for participant tracking
+</ParamField>
+
+<ParamField path="NaturalPerson" type="Boolean">
+  `true` for individual, `false` for legal entity
+</ParamField>
+
+<ParamField path="Name" type="string">
+  Full name or company name
+</ParamField>
+
+<ParamField path="IdentificationOrNit" type="string">
+  National ID or Tax ID (NIT)
+</ParamField>
+
+<ParamField path="Phone" type="string">
+  Landline phone number
+</ParamField>
+
+<ParamField path="Cellular" type="string">
+  Mobile phone number
+</ParamField>
+
+<ParamField path="Address" type="string">
+  Physical address
+</ParamField>
+
+<ParamField path="City" type="string">
+  City of residence/operation
+</ParamField>
+
+<ParamField path="Email" type="string">
+  Contact email address
+</ParamField>
+
+<ParamField path="DateCreate" type="DateTime">
+  Registration timestamp
+</ParamField>
+
+<ParamField path="Proposals" type="string">
+  Filename of uploaded proposal PDF
+</ParamField>
+
+<ParamField path="MasterId" type="int?">
+  Foreign key to Master (announcement/convocatoria)
+</ParamField>
+
+<ParamField path="Master" type="Master">
+  Navigation property to related announcement
+</ParamField>
+
+**Example:**
+```csharp
+var participant = new BiddingParticipant
+{
+    Ref = Guid.NewGuid(),
+    NaturalPerson = true,
+    Name = "María García López",
+    IdentificationOrNit = "43123456",
+    Phone = "6048211234",
+    Cellular = "3101234567",
+    Address = "Carrera 10 #15-20",
+    City = "Santa Fe de Antioquia",
+    Email = "maria.garcia@example.com",
+    DateCreate = DateTime.Now,
+    Proposals = "propuesta-maria-garcia-2026.pdf",
+    MasterId = 5
+};
+```
+
+---
+
+### Category
+
+Service categories for organizational offerings.
+
+**Namespace:** `model`  
+**Table:** `Categories`
+
+<ParamField path="Id" type="int">
+  Primary key
+</ParamField>
+
+<ParamField path="NameCategory" type="string">
+  Category display name
+</ParamField>
+
+<ParamField path="UrlCategory" type="string">
+  URL-friendly slug
+</ParamField>
+
+<ParamField path="Description" type="string">
+  HTML content describing the category
+</ParamField>
+
+<ParamField path="CoverPage" type="string">
+  Cover image filename
+</ParamField>
+
+<ParamField path="Statud" type="bool">
+  Active/inactive status
+</ParamField>
+
+<ParamField path="DateCreate" type="DateTime">
+  Creation timestamp
+</ParamField>
+
+<ParamField path="DateUpdate" type="DateTime">
+  Last modification timestamp
+</ParamField>
+
+**Attributes:**
+- `Description` field marked with `[AllowHtml]` and `[DataType(DataType.MultilineText)]`
+
+**Example:**
+```csharp
+var category = new Category
+{
+    NameCategory = "Acueducto",
+    UrlCategory = "acueducto",
+    Description = "<p>Servicio de agua potable...</p>",
+    CoverPage = "acueducto-cover.jpg",
+    Statud = true,
+    DateCreate = DateTime.Now
+};
+```
+
+---
+
+### Document
+
+Legal and official documents with file attachments.
+
+**Namespace:** `model`  
+**Table:** `Documents`
+
+<ParamField path="ID" type="int">
+  Primary key
+</ParamField>
+
+<ParamField path="Name" type="string">
+  Document title
+</ParamField>
+
+<ParamField path="UrlName" type="string">
+  URL-friendly identifier
+</ParamField>
+
+<ParamField path="NameProyect" type="string">
+  Associated project/announcement name
+</ParamField>
+
+<ParamField path="Description" type="string">
+  HTML description of document
+</ParamField>
+
+<ParamField path="CreateDate" type="DateTime">
+  Creation date
+</ParamField>
+
+<ParamField path="DateUpdate" type="DateTime">
+  Last update date
+</ParamField>
+
+<ParamField path="MasterId" type="int?">
+  Optional foreign key to Master
+</ParamField>
+
+<ParamField path="Masters" type="Master">
+  Navigation property to Master
+</ParamField>
+
+<ParamField path="FileDocument" type="ICollection<FileDocument>">
+  Collection of attached files
+</ParamField>
+
+**Example:**
+```csharp
+var document = new Document
+{
+    Name = "Estatutos de la Empresa",
+    UrlName = "estatutos-de-la-empresa",
+    NameProyect = "Documentos Institucionales",
+    Description = "<p>Estatutos vigentes...</p>",
+    CreateDate = DateTime.Now,
+    FileDocument = new List<FileDocument>
+    {
+        new FileDocument { NameFile = "Estatutos", RouteFile = "estatutos-2026.pdf" }
+    }
+};
+```
+
+---
+
+### Product
+
+Services and products offered by the organization.
+
+**Namespace:** `model`  
+**Table:** `Products`
+
+<ParamField path="ProductId" type="int">
+  Primary key
+</ParamField>
+
+<ParamField path="Name" type="string">
+  Product/service name
+</ParamField>
+
+<ParamField path="UrlProduct" type="string">
+  URL-friendly slug
+</ParamField>
+
+<ParamField path="Icono" type="string">
+  Icon filename or CSS class
+</ParamField>
+
+<ParamField path="Description" type="string">
+  HTML description
+</ParamField>
+
+<ParamField path="DateCreate" type="DateTime">
+  Creation timestamp
+</ParamField>
+
+**Example:**
+```csharp
+var product = new Product
+{
+    Name = "Instalación de Medidores",
+    UrlProduct = "instalacion-de-medidores",
+    Icono = "icon-meter.svg",
+    Description = "<p>Servicio de instalación...</p>",
+    DateCreate = DateTime.Now
+};
+```
+
+---
+
+### PQRSD
+
+Petitions, Complaints, Claims, Suggestions, and Congratulations.
+
+**Namespace:** `model`  
+**Table:** `PQRSDs`
+
+<ParamField path="PQRSDID" type="Guid">
+  Primary key (unique identifier)
+</ParamField>
+
+<ParamField path="NamePerson" type="string">
+  Name of submitter
+</ParamField>
+
+<ParamField path="Email" type="string">
+  Contact email
+</ParamField>
+
+<ParamField path="PQRSDName" type="string">
+  Subject/title of request
+</ParamField>
+
+<ParamField path="Description" type="string">
+  Detailed description (HTML)
+</ParamField>
+
+<ParamField path="NameSotypeOfRequest" type="string">
+  Type: Petición, Queja, Reclamo, Sugerencia, Felicitación
+</ParamField>
+
+<ParamField path="DateCreate" type="DateTime">
+  Submission date
+</ParamField>
+
+<ParamField path="File" type="string">
+  Optional attachment filename
+</ParamField>
+
+<ParamField path="Reply" type="string">
+  Administrative response
+</ParamField>
+
+<ParamField path="IsAnswered" type="Boolean">
+  Response status
+</ParamField>
+
+<ParamField path="AnswerDate" type="DateTime">
+  Date of response
+</ParamField>
+
+**Example:**
+```csharp
+var pqrsd = new PQRSD
+{
+    PQRSDID = Guid.NewGuid(),
+    NamePerson = "Carlos Ramírez",
+    Email = "carlos@example.com",
+    PQRSDName = "Solicitud de instalación",
+    Description = "Requiero instalación de servicio...",
+    NameSotypeOfRequest = "Petición",
+    DateCreate = DateTime.Now,
+    IsAnswered = false
+};
+```
+
+---
+
+### Master
+
+Multi-purpose entity for blogs, announcements, and brigades.
+
+**Namespace:** `model`  
+**Table:** `Masters`
+
+<ParamField path="Id" type="int">
+  Primary key
+</ParamField>
+
+<ParamField path="NameMaster" type="string">
+  Title/name
+</ParamField>
+
+<ParamField path="UrlMaster" type="string">
+  URL slug
+</ParamField>
+
+<ParamField path="Description" type="string">
+  HTML content
+</ParamField>
+
+<ParamField path="CoverPage" type="string">
+  Cover image filename
+</ParamField>
+
+<ParamField path="Statud" type="Boolean">
+  Active status
+</ParamField>
+
+<ParamField path="Brigade" type="Boolean">
+  Marks as brigade entry
+</ParamField>
+
+<ParamField path="DateBrigade" type="DateTime">
+  Brigade event date
+</ParamField>
+
+<ParamField path="Blog" type="Boolean">
+  Marks as blog post
+</ParamField>
+
+<ParamField path="Author" type="string">
+  Blog post author
+</ParamField>
+
+<ParamField path="NacionLicitante" type="Boolean">
+  Marks as bidding announcement
+</ParamField>
+
+<ParamField path="NacionLicitantegStartDate" type="DateTime">
+  Bidding start date
+</ParamField>
+
+<ParamField path="NacionLicitanteEndDate" type="DateTime">
+  Bidding end date
+</ParamField>
+
+<ParamField path="DateCreate" type="DateTime">
+  Creation timestamp
+</ParamField>
+
+<ParamField path="DateUpdate" type="DateTime">
+  Last update timestamp
+</ParamField>
+
+<ParamField path="BiddingParticipants" type="IList<BiddingParticipant>">
+  Related participants (when NacionLicitante = true)
+</ParamField>
+
+<ParamField path="FileDocument" type="ICollection<FileDocument>">
+  Attached files
+</ParamField>
+
+<ParamField path="Documents" type="ICollection<Document>">
+  Related documents
+</ParamField>
+
+**Usage patterns:**
+
+<Expandable title="Blog Post">
+```csharp
+var blogPost = new Master
+{
+    NameMaster = "Nueva Obra en el Municipio",
+    UrlMaster = "nueva-obra-en-el-municipio",
+    Description = "<p>Contenido...</p>",
+    Blog = true,
+    Author = "Oficina de Comunicaciones",
+    Statud = true,
+    DateCreate = DateTime.Now
+};
+```
+</Expandable>
+
+<Expandable title="Bidding Announcement">
+```csharp
+var announcement = new Master
+{
+    NameMaster = "Licitación Pública 001-2026",
+    UrlMaster = "licitacion-publica-001-2026",
+    NacionLicitante = true,
+    NacionLicitantegStartDate = new DateTime(2026, 3, 1),
+    NacionLicitanteEndDate = new DateTime(2026, 3, 31),
+    Statud = true
+};
+```
+</Expandable>
+
+<Expandable title="Brigade Event">
+```csharp
+var brigade = new Master
+{
+    NameMaster = "Jornada de Salud Barrio Centro",
+    UrlMaster = "jornada-salud-barrio-centro",
+    Brigade = true,
+    DateBrigade = new DateTime(2026, 4, 15),
+    Statud = true
+};
+```
+</Expandable>
+
+---
+
+## Data Transfer Objects (DTOs)
+
+### BiddingParticipantCreateDTO
+
+DTO for creating new bidding participants.
+
+**Namespace:** `modelDTOs`
+
+<ParamField path="NaturalPerson" type="Boolean" required>
+  Person type selection
+</ParamField>
+
+<ParamField path="Name" type="string" required>
+  Max 150 characters
+</ParamField>
+
+<ParamField path="IdentificationOrNit" type="string" required>
+  Max 20 characters
+</ParamField>
+
+<ParamField path="Phone" type="string" required>
+  Landline number
+</ParamField>
+
+<ParamField path="Cellular" type="string" required>
+  Max 10 characters
+</ParamField>
+
+<ParamField path="Address" type="string" required>
+  Max 150 characters
+</ParamField>
+
+<ParamField path="City" type="string" required>
+  Max 50 characters
+</ParamField>
+
+<ParamField path="Email" type="string" required>
+  Must be valid email format
+</ParamField>
+
+<ParamField path="Proposals" type="IFormFile" required>
+  PDF file, max 10MB
+</ParamField>
+
+<ParamField path="MasterId" type="int?">
+  Associated announcement ID
+</ParamField>
+
+**Validations:**
+- `[PdfSizes]` - Max 10MB
+- `[ValidateExtensionPDF]` - Must be `.pdf`
+- `[EmailAddress]` - Valid email format
+- `[Required]` and `[MaxLength]` attributes on fields
+
+**Usage:**
+```csharp
+var dto = new BiddingParticipantCreateDTO
+{
+    NaturalPerson = true,
+    Name = "Juan Pérez",
+    IdentificationOrNit = "1234567890",
+    Phone = "6041234567",
+    Cellular = "3001234567",
+    Address = "Calle 10 #20-30",
+    City = "Medellín",
+    Email = "juan@example.com",
+    Proposals = pdfFile,
+    MasterId = 5
+};
+```
+
+---
+
+### CategoryCreateDto
+
+DTO for creating service categories.
+
+**Namespace:** `modelDTOs`
+
+<ParamField path="NameCategory" type="string" required>
+  Max 150 characters, no special characters
+</ParamField>
+
+<ParamField path="Description" type="string">
+  HTML content (multiline)
+</ParamField>
+
+<ParamField path="CoverPage" type="IFormFile">
+  Image file (JPG, JPEG, GIF, PNG), max 2MB
+</ParamField>
+
+<ParamField path="Statud" type="bool">
+  Active status
+</ParamField>
+
+**Validations:**
+- `[RegularExpression(@"^[-a-zA-Z0-9ñÑáéíóúáéíóúÁÉÍÓÚ ]{1,150}$")]` - No special characters
+- `[ValidateExtensionImg]` - Image formats only
+- `[ImageSizes]` - Max 2MB
+
+**Usage:**
+```csharp
+var dto = new CategoryCreateDto
+{
+    NameCategory = "Acueducto",
+    Description = "<p>Servicio de agua potable</p>",
+    CoverPage = imageFile,
+    Statud = true
+};
+```
+
+---
+
+### CategoryEditDto
+
+DTO for updating categories.
+
+**Namespace:** `modelDTOs`
+
+<ParamField path="Id" type="int" required>
+  Category ID
+</ParamField>
+
+<ParamField path="NameCategory" type="string">
+  Display name (read-only in edit)
+</ParamField>
+
+<ParamField path="Description" type="string">
+  Updated HTML content
+</ParamField>
+
+<ParamField path="CoverPage" type="IFormFile">
+  New image (optional, keeps existing if null)
+</ParamField>
+
+<ParamField path="Statud" type="bool">
+  Active status
+</ParamField>
+
+---
+
+### BlogCreateDto
+
+DTO for creating blog posts.
+
+**Namespace:** `modelDTOs`
+
+<ParamField path="NameBlog" type="string" required>
+  Blog post title
+</ParamField>
+
+<ParamField path="Description" type="string" required>
+  HTML content
+</ParamField>
+
+<ParamField path="Author" type="string" required>
+  Author name
+</ParamField>
+
+<ParamField path="CoverPage" type="IFormFile">
+  Cover image (max 2MB)
+</ParamField>
+
+**Similar to CategoryCreateDto validations**
+
+---
+
+### DocumentCreateDTO
+
+DTO for creating documents with multiple files.
+
+**Namespace:** `modelDTOs`
+
+<ParamField path="Name" type="string" required>
+  Document title
+</ParamField>
+
+<ParamField path="Description" type="string">
+  HTML description
+</ParamField>
+
+<ParamField path="MasterId" type="int?">
+  Optional project association
+</ParamField>
+
+<ParamField path="RouteFile" type="List<IFormFile>">
+  Collection of PDF files to attach
+</ParamField>
+
+**Usage:**
+```csharp
+var dto = new DocumentCreateDTO
+{
+    Name = "Plan de Desarrollo",
+    Description = "<p>Plan oficial...</p>",
+    MasterId = 8,
+    RouteFile = new List<IFormFile> { file1, file2 }
+};
+```
+
+---
+
+## Custom Validation Attributes
+
+### ImageSizes
+
+Validates image file size.
+
+**Location:** `modelDTOs.CustomValidations`  
+**Max Size:** 2MB (2,097,152 bytes)
+
+### PdfSizes
+
+Validates PDF file size.
+
+**Location:** `modelDTOs.CustomValidations`  
+**Max Size:** 10MB (10,485,760 bytes)
+
+### ValidateExtensionImg
+
+Validates image file extensions.
+
+**Allowed:** `.jpg`, `.jpeg`, `.gif`, `.png`
+
+### ValidateExtensionPDF
+
+Validates PDF file extension.
+
+**Allowed:** `.pdf`
+
+---
+
+## Relationships
+
+### One-to-Many
+
+<ResponseField name="Master → BiddingParticipants" type="1:N">
+  One announcement can have multiple participants
+</ResponseField>
+
+<ResponseField name="Document → FileDocument" type="1:N">
+  One document can have multiple file attachments
+</ResponseField>
+
+<ResponseField name="Master → FileDocument" type="1:N">
+  One master entry can have multiple files
+</ResponseField>
+
+<ResponseField name="Master → Documents" type="1:N">
+  One master can be associated with multiple documents
+</ResponseField>
+
+### Foreign Keys
+
+```csharp
+BiddingParticipant.MasterId → Master.Id
+Document.MasterId → Master.Id
+FileDocument.DocumentoId → Document.ID
+```
+
+---
+
+## Database Configuration
+
+Entity configurations are located in `src/persistenDatabase/Config/`:
+
+- `BiddingParticipantConfig.cs`
+- `CategoryConfig.cs`
+- `DocumentConfig.cs`
+- `EmployeeConfig.cs`
+- `FileDocumentConfig.cs`
+- `MasterConfig.cs`
+- `PQRSDConfig.cs`
+- `ProductConfig.cs`
+
+These use Fluent API to configure:
+- Primary keys
+- Foreign key relationships
+- Column types and constraints
+- Index definitions
+- Default values

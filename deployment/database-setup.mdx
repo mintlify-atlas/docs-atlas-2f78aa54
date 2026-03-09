@@ -1,0 +1,499 @@
+---
+title: 'Database Setup'
+description: 'Set up and migrate the SQL Server database for ESP Santa Fe de Antioquia'
+---
+
+## Overview
+
+ESP Santa Fe de Antioquia uses Entity Framework Core 3.1 with SQL Server for data persistence. This guide covers database setup, running migrations, and production database management.
+
+## Database Requirements
+
+- **SQL Server**: Version 2012 or later (SQL Server 2016+ recommended)
+- **Database Name**: `BDESPSantaFeAnt`
+- **Collation**: SQL_Latin1_General_CP1_CI_AS (default)
+- **Recovery Model**: Full (recommended for production)
+- **Compatibility Level**: 130 (SQL Server 2016) or higher
+
+## Database Schema Overview
+
+The application database includes these main tables:
+
+- **AspNetUsers/Roles/Claims** - ASP.NET Core Identity for authentication
+- **Categories** - Service categories
+- **Masters** - Master data for brigades, blogs, and bidding processes
+- **BiddingParticipants** - Participants in bidding processes
+- **Documents** - Legal documents and files
+- **FileDocuments** - Document file attachments
+- **PQRSDs** - Citizen requests and inquiries (Peticiones, Quejas, Reclamos, Sugerencias, Denuncias)
+- **Products** - Services offered by the organization
+- **Employees** - Employee information
+- **Brigades** - Brigade management (part of Masters)
+
+<Note>
+  The database schema is defined in the migration file at `src/persistenDatabase/Migrations/20210927150752_CreandoBD.cs`.
+</Note>
+
+## Creating the Production Database
+
+<Steps>
+  <Step title="Connect to SQL Server">
+    Connect to your SQL Server instance using SQL Server Management Studio (SSMS) or Azure Data Studio.
+  </Step>
+
+  <Step title="Create Database">
+    Create a new database:
+    
+    ```sql
+    CREATE DATABASE BDESPSantaFeAnt
+    COLLATE SQL_Latin1_General_CP1_CI_AS;
+    GO
+    
+    -- Set recovery model for production
+    ALTER DATABASE BDESPSantaFeAnt 
+    SET RECOVERY FULL;
+    GO
+    ```
+  </Step>
+
+  <Step title="Create SQL Login">
+    Create a SQL Server login for the application:
+    
+    ```sql
+    -- Create login
+    CREATE LOGIN esp_app_user 
+    WITH PASSWORD = 'YourSecurePassword123!';
+    GO
+    
+    -- Create database user
+    USE BDESPSantaFeAnt;
+    GO
+    
+    CREATE USER esp_app_user FOR LOGIN esp_app_user;
+    GO
+    
+    -- Grant permissions
+    ALTER ROLE db_datareader ADD MEMBER esp_app_user;
+    ALTER ROLE db_datawriter ADD MEMBER esp_app_user;
+    ALTER ROLE db_ddladmin ADD MEMBER esp_app_user;
+    GO
+    ```
+  </Step>
+
+  <Step title="Test Connection">
+    Test the connection using the connection string:
+    
+    ```
+    Server=YOUR_SERVER;Database=BDESPSantaFeAnt;User Id=esp_app_user;Password=YourSecurePassword123!;MultipleActiveResultSets=true
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  The `db_ddladmin` role is required for Entity Framework to apply migrations. In high-security environments, consider applying migrations manually and removing this permission after deployment.
+</Warning>
+
+## Understanding Entity Framework Migrations
+
+Entity Framework Core uses migrations to manage database schema changes. The application has one base migration:
+
+- **20210927150752_CreandoBD** - Initial database creation
+
+Migration files are located in `src/persistenDatabase/Migrations/`.
+
+### How Migrations Work
+
+1. **Migration File** (`20210927150752_CreandoBD.cs`) - Contains `Up()` and `Down()` methods
+2. **Designer File** (`20210927150752_CreandoBD.Designer.cs`) - Metadata about the migration
+3. **Model Snapshot** (`ApplicationDbContextModelSnapshot.cs`) - Current state of the model
+
+Entity Framework tracks which migrations have been applied in the `__EFMigrationsHistory` table.
+
+## Running Database Migrations
+
+### Prerequisites
+
+Ensure you have the Entity Framework Core tools installed:
+
+```bash
+# Install globally
+dotnet tool install --global dotnet-ef
+
+# Or update if already installed
+dotnet tool update --global dotnet-ef
+```
+
+Verify installation:
+
+```bash
+dotnet ef --version
+```
+
+### Apply Migrations to Production
+
+<Steps>
+  <Step title="Set Production Connection String">
+    Update `appsettings.Production.json` or set an environment variable:
+    
+    ```bash
+    # Windows
+    set ConnectionStrings__DefaultConnection="Server=YOUR_SERVER;Database=BDESPSantaFeAnt;User Id=esp_app_user;Password=YourPassword;MultipleActiveResultSets=true"
+    
+    # PowerShell
+    $env:ConnectionStrings__DefaultConnection="Server=YOUR_SERVER;Database=BDESPSantaFeAnt;User Id=esp_app_user;Password=YourPassword;MultipleActiveResultSets=true"
+    ```
+  </Step>
+
+  <Step title="Navigate to Main Project">
+    ```bash
+    cd src/prjESPSantaFeAnt
+    ```
+  </Step>
+
+  <Step title="Apply Migrations">
+    Run the update command:
+    
+    ```bash
+    dotnet ef database update --project ../persistenDatabase/persistenDatabase.csproj --startup-project . --context ApplicationDbContext
+    ```
+    
+    Or using the short form:
+    
+    ```bash
+    dotnet ef database update
+    ```
+    
+    This will:
+    - Connect to the database
+    - Check `__EFMigrationsHistory` for applied migrations
+    - Apply any pending migrations in order
+  </Step>
+
+  <Step title="Verify Migration">
+    Check that tables were created:
+    
+    ```sql
+    USE BDESPSantaFeAnt;
+    GO
+    
+    SELECT TABLE_NAME 
+    FROM INFORMATION_SCHEMA.TABLES 
+    WHERE TABLE_TYPE = 'BASE TABLE'
+    ORDER BY TABLE_NAME;
+    GO
+    
+    -- Check migration history
+    SELECT * FROM __EFMigrationsHistory;
+    GO
+    ```
+  </Step>
+</Steps>
+
+### Migration with Specific Environment
+
+```bash
+dotnet ef database update --environment Production
+```
+
+This uses the `appsettings.Production.json` configuration file.
+
+<Note>
+  If the migration fails, check the error message carefully. Common issues include incorrect connection strings, insufficient permissions, or network connectivity problems.
+</Note>
+
+## Alternative: SQL Script Generation
+
+For environments where the application account doesn't have DDL permissions, generate SQL scripts:
+
+<Steps>
+  <Step title="Generate Migration Script">
+    ```bash
+    cd src/prjESPSantaFeAnt
+    dotnet ef migrations script --output migration.sql --idempotent --project ../persistenDatabase/persistenDatabase.csproj
+    ```
+    
+    The `--idempotent` flag makes the script safe to run multiple times.
+  </Step>
+
+  <Step title="Review the Script">
+    Open `migration.sql` and review the SQL commands. The script will:
+    - Check for existing migrations
+    - Only apply changes that haven't been applied
+    - Update the `__EFMigrationsHistory` table
+  </Step>
+
+  <Step title="Execute via SSMS">
+    Run the script using SQL Server Management Studio or:
+    
+    ```bash
+    sqlcmd -S YOUR_SERVER -d BDESPSantaFeAnt -U sa -P YourPassword -i migration.sql
+    ```
+  </Step>
+</Steps>
+
+### Script-Specific Migration Range
+
+To generate a script for specific migrations:
+
+```bash
+# From beginning to specific migration
+dotnet ef migrations script 0 20210927150752_CreandoBD
+
+# Between two migrations
+dotnet ef migrations script 20210927150752_CreandoBD 20211015120000_NextMigration
+```
+
+## Verifying Database Setup
+
+After applying migrations, verify the database:
+
+### Check Tables
+
+```sql
+USE BDESPSantaFeAnt;
+GO
+
+-- Verify all tables exist
+SELECT 
+    t.name AS TableName,
+    p.rows AS RowCount
+FROM sys.tables t
+INNER JOIN sys.partitions p ON t.object_id = p.object_id
+WHERE p.index_id IN (0,1)
+ORDER BY t.name;
+GO
+```
+
+Expected tables:
+- AspNetRoles
+- AspNetRoleClaims
+- AspNetUsers
+- AspNetUserClaims
+- AspNetUserLogins
+- AspNetUserRoles
+- AspNetUserTokens
+- BiddingParticipants
+- Categories
+- Documents
+- Employees
+- FileDocuments
+- Masters
+- PQRSDs
+- Products
+- __EFMigrationsHistory
+
+### Verify Indexes
+
+```sql
+-- Check indexes on AspNetUsers
+SELECT 
+    i.name AS IndexName,
+    i.type_desc AS IndexType,
+    COL_NAME(ic.object_id, ic.column_id) AS ColumnName
+FROM sys.indexes i
+INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+WHERE i.object_id = OBJECT_ID('AspNetUsers')
+ORDER BY i.name, ic.key_ordinal;
+GO
+```
+
+### Test Application Connection
+
+Update your `appsettings.Production.json` and start the application:
+
+```bash
+set ASPNETCORE_ENVIRONMENT=Production
+cd publish
+dotnet prjESPSantaFeAnt.dll
+```
+
+Check the logs for successful database connection.
+
+## Database Maintenance
+
+### Backup Strategy
+
+Implement a backup strategy for production:
+
+```sql
+-- Full backup
+BACKUP DATABASE BDESPSantaFeAnt
+TO DISK = 'C:\Backups\BDESPSantaFeAnt_Full.bak'
+WITH FORMAT, COMPRESSION, STATS = 10;
+GO
+
+-- Transaction log backup (for point-in-time recovery)
+BACKUP LOG BDESPSantaFeAnt
+TO DISK = 'C:\Backups\BDESPSantaFeAnt_Log.trn'
+WITH COMPRESSION, STATS = 10;
+GO
+```
+
+**Recommended schedule**:
+- Full backup: Daily
+- Transaction log backup: Every 15-30 minutes
+- Keep backups for at least 30 days
+
+### Database Monitoring
+
+Monitor database performance:
+
+```sql
+-- Check database size
+EXEC sp_spaceused;
+GO
+
+-- Check table sizes
+EXEC sp_MSforeachtable 'EXEC sp_spaceused ''?''';
+GO
+
+-- Active connections
+SELECT 
+    DB_NAME(dbid) as DatabaseName,
+    COUNT(dbid) as NumberOfConnections,
+    loginame as LoginName
+FROM sys.sysprocesses
+WHERE dbid > 0
+GROUP BY dbid, loginame;
+GO
+```
+
+### Index Maintenance
+
+Rebuild indexes periodically:
+
+```sql
+USE BDESPSantaFeAnt;
+GO
+
+-- Rebuild all indexes
+EXEC sp_MSforeachtable 'ALTER INDEX ALL ON ? REBUILD';
+GO
+
+-- Update statistics
+EXEC sp_updatestats;
+GO
+```
+
+<Warning>
+  Index rebuilding can be resource-intensive. Schedule it during low-traffic periods.
+</Warning>
+
+## Troubleshooting
+
+### Migration Fails with "Login failed"
+
+**Problem**: Connection string is incorrect or user lacks permissions.
+
+**Solution**:
+1. Verify connection string in `appsettings.Production.json`
+2. Test connection using SQL Server Management Studio
+3. Ensure user has `db_ddladmin` role
+
+### "Cannot open database" Error
+
+**Problem**: Database doesn't exist or service can't access it.
+
+**Solution**:
+```sql
+-- Verify database exists
+SELECT name FROM sys.databases WHERE name = 'BDESPSantaFeAnt';
+GO
+```
+
+### "Network-related or instance-specific error"
+
+**Problem**: SQL Server is not accessible from the application server.
+
+**Solution**:
+1. Check firewall rules (SQL Server uses port 1433 by default)
+2. Verify SQL Server allows remote connections
+3. Ensure SQL Server Browser service is running
+4. Test with `telnet YOUR_SERVER 1433`
+
+### "MultipleActiveResultSets not supported"
+
+**Problem**: Connection string is missing required parameter.
+
+**Solution**: Add `MultipleActiveResultSets=true` to connection string.
+
+## Creating Future Migrations
+
+When you need to modify the database schema:
+
+<Steps>
+  <Step title="Modify the Model">
+    Update entity classes in the `src/model` project.
+  </Step>
+
+  <Step title="Create Migration">
+    ```bash
+    cd src/prjESPSantaFeAnt
+    dotnet ef migrations add MigrationName --project ../persistenDatabase/persistenDatabase.csproj
+    ```
+  </Step>
+
+  <Step title="Review Generated Migration">
+    Check the generated migration file in `src/persistenDatabase/Migrations/`.
+  </Step>
+
+  <Step title="Apply Migration">
+    ```bash
+    dotnet ef database update
+    ```
+  </Step>
+</Steps>
+
+## Security Best Practices
+
+<Warning>
+  Follow these security practices for production databases:
+</Warning>
+
+- **Use strong passwords** - Minimum 12 characters with mixed case, numbers, and symbols
+- **Limit permissions** - Application account should have minimal required permissions
+- **Enable encryption** - Add `Encrypt=True` to connection strings for Azure SQL
+- **Firewall rules** - Only allow connections from application server IPs
+- **Audit access** - Enable SQL Server auditing for production databases
+- **Regular backups** - Test backup restoration regularly
+- **Connection pooling** - Keep connection strings consistent to enable pooling
+- **Secrets management** - Never store connection strings in source control
+
+## Database Connection Pooling
+
+Entity Framework Core uses connection pooling by default. Configure in connection string:
+
+```
+Server=YOUR_SERVER;Database=BDESPSantaFeAnt;User Id=esp_app_user;Password=YourPassword;MultipleActiveResultSets=true;Min Pool Size=5;Max Pool Size=100;
+```
+
+**Recommended settings**:
+- Min Pool Size: 5-10
+- Max Pool Size: 50-100 (adjust based on load)
+
+## Next Steps
+
+After setting up your database:
+
+- Create an admin user account
+- Seed initial data (categories, products, etc.)
+- Set up database monitoring
+- Configure automated backups
+- Test the application end-to-end
+
+## Database Setup Checklist
+
+- [ ] Created `BDESPSantaFeAnt` database
+- [ ] Created application SQL login with appropriate permissions
+- [ ] Tested database connectivity
+- [ ] Applied Entity Framework migrations
+- [ ] Verified all tables were created
+- [ ] Checked migration history table
+- [ ] Set up automated backup schedule
+- [ ] Configured transaction log backups
+- [ ] Set database recovery model to Full
+- [ ] Documented connection strings securely
+- [ ] Configured firewall rules
+- [ ] Tested application database connection
+- [ ] Set up database monitoring
+- [ ] Created initial admin user account

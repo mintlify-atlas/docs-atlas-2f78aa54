@@ -1,0 +1,550 @@
+---
+title: 'Bidding & Procurement'
+description: 'Public procurement process management and bidder registration'
+icon: 'gavel'
+---
+
+## Overview
+
+The Bidding and Procurement system manages ESP Santa Fe de Antioquia's public procurement processes (convocatorias/licitaciones). This comprehensive feature handles the publication of bidding opportunities, manages bidder registration and proposals, and ensures transparency in procurement activities.
+
+<Card title="Legal Compliance" icon="scale-balanced">
+  Colombian law requires public entities to conduct transparent procurement processes. This system ensures compliance with legal requirements while streamlining the bidding workflow.
+</Card>
+
+## System Components
+
+The procurement system consists of two main modules:
+
+<CardGroup cols={2}>
+  <Card title="Bidding Processes" icon="clipboard-list">
+    **NacionLicitante**: Manage procurement opportunities, publish requirements, and track timelines
+  </Card>
+  
+  <Card title="Bidder Registration" icon="user-check">
+    **BiddingParticipants**: Register interested parties and collect proposal submissions
+  </Card>
+</CardGroup>
+
+## User Workflows
+
+### Creating a Procurement Process
+
+<Steps>
+  <Step title="Admin Creates Bidding">
+    Administrators create a new procurement process with:
+    - Process name/title
+    - Detailed description and requirements
+    - Start and end dates
+    - Featured image or cover
+    - Related documents
+  </Step>
+  
+  <Step title="Upload Documents">
+    Attach official documents including:
+    - Terms of reference
+    - Technical specifications
+    - Legal requirements
+    - Financial criteria
+  </Step>
+  
+  <Step title="Publication">
+    Process goes live on `/convocatorias` with active status based on date range
+  </Step>
+  
+  <Step title="Monitor Submissions">
+    Track bidder registrations and proposal submissions throughout the process
+  </Step>
+</Steps>
+
+### Bidder Registration
+
+<Steps>
+  <Step title="Discover Opportunity">
+    Bidders browse active procurement processes at `/convocatorias`
+  </Step>
+  
+  <Step title="Review Requirements">
+    Access detailed information at `/convocatorias/{nameNacionLicitante}`
+  </Step>
+  
+  <Step title="Register Interest">
+    Complete registration form with company/personal details
+  </Step>
+  
+  <Step title="Submit Proposal">
+    Upload proposal documents and receive confirmation code
+  </Step>
+  
+  <Step title="Track Status">
+    Use reference code to check submission status at `/convocatorias/reference/{reference}`
+  </Step>
+</Steps>
+
+## Data Models
+
+### Procurement Process (NacionLicitante)
+
+```csharp
+public class Master  // Used for bidding processes
+{
+    public int Id { get; set; }
+    public string NameMaster { get; set; }                    // Process name
+    public string UrlMaster { get; set; }                     // URL slug
+    public string Description { get; set; }                   // HTML description
+    public string CoverPage { get; set; }                     // Cover image
+    public DateTime NacionLicitantegStartDate { get; set; }   // Opening date
+    public DateTime NacionLicitanteEndDate { get; set; }      // Closing date
+    public Boolean NacionLicitante { get; set; }              // Flag: true for procurement
+    public Boolean Statud { get; set; }                       // Published status
+    public DateTime DateCreate { get; set; }                  // Creation date
+    public DateTime DateUpdate { get; set; }                  // Last update
+    
+    // Navigation properties
+    public IEnumerable<FileDocument> FilesDocuments { get; set; }
+    public IEnumerable<Document> DelatedDocuments { get; set; }
+}
+```
+
+### Bidder Participant
+
+```csharp
+public class BiddingParticipant
+{
+    public int Id { get; set; }
+    public Guid Ref { get; set; }                      // Reference tracking code
+    public int MasterId { get; set; }                  // FK to procurement process
+    public Boolean NaturalPerson { get; set; }         // True = individual, False = company
+    public string Name { get; set; }                   // Bidder name/company
+    public string IdentificationOrNit { get; set; }    // ID or tax number
+    public string Phone { get; set; }                  // Landline
+    public string Cellular { get; set; }               // Mobile
+    public string Address { get; set; }                // Physical address
+    public string City { get; set; }                   // City location
+    public string Email { get; set; }                  // Contact email
+    public string Proposals { get; set; }              // Uploaded proposal path
+    public DateTime DateCreate { get; set; }           // Submission date
+}
+```
+
+## Controller Actions - Procurement Processes
+
+### Admin Routes
+
+<Accordion title="List Processes - GET /NacionLicitante">
+  **Purpose**: Display all procurement processes
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - View all processes (active and closed)
+  - See start and end dates
+  - Monitor creation and update timestamps
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Index()
+  {
+      var _model = from a in await _nacionLicitante.GetAll()
+                   select new ModelViewNacionLicitante
+                   {
+                       Id = a.Id,
+                       NameMaster = a.NameMaster,
+                       UrlMaster = a.UrlMaster,
+                       NacionLicitantegStartDate = a.NacionLicitantegStartDate
+                           .ToString("MMMM dd, yyyy", 
+                           CultureInfo.CreateSpecificCulture("es-CO")),
+                       NacionLicitanteEndDate = a.NacionLicitanteEndDate
+                           .ToString("MMMM dd, yyyy",
+                           CultureInfo.CreateSpecificCulture("es-CO"))
+                   };
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Create Process - GET/POST /NacionLicitante/Create">
+  **Purpose**: Create new procurement process
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Validation**:
+  - Unique process names
+  - Valid date ranges (end after start)
+  - Required document uploads
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public async Task<IActionResult> Create(NacionLicitanteCreateDto model)
+  {
+      var _urlName = _nacionLicitante.DuplicaName(model.NameMaster);
+
+      if (_urlName)
+      {
+          ViewData["DuplicaName"] = 
+              $"El Nombre {model.NameMaster} ya ha sido utilizado, cambielo";
+          return View(model);
+      }
+
+      if (ModelState.IsValid)
+      {
+          await _nacionLicitante.Create(model);
+          return RedirectToAction(nameof(Index));
+      }
+
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Delete Process - GET/POST /NacionLicitante/Delete/{id}">
+  **Purpose**: Remove procurement process
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Warning**: Also deletes all associated bidder registrations and documents
+</Accordion>
+
+### Public Routes
+
+<Accordion title="Browse Opportunities - GET /convocatorias">
+  **Purpose**: Public listing of active procurement processes
+  
+  **Access**: Public
+  
+  **Features**:
+  - Shows only published processes (Statud = true)
+  - Indicates active status based on current date
+  - Displays cover images and key dates
+  - Links to detailed information
+  
+  ```csharp
+  [Route("convocatorias")]
+  public async Task<IActionResult> ListGetAll()
+  {
+      var _model = from a in await _nacionLicitante.GetAll()
+                   where a.Statud == true
+                   select new ModelViewNacionLicitante
+                   {
+                       Id = a.Id,
+                       NameMaster = a.NameMaster,
+                       UrlMaster = a.UrlMaster,
+                       CoverPage = a.CoverPage,
+                       Description = a.Description,
+                       NacionLicitantegStartDate = a.NacionLicitantegStartDate.ToString(),
+                       NacionLicitanteEndDate = a.NacionLicitanteEndDate.ToString(),
+                       Statud = ValidateActivo(a)
+                   };
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Process Details - GET /convocatorias/{nameNacionLicitante}">
+  **Purpose**: Display complete procurement information
+  
+  **Access**: Public
+  
+  **Features**:
+  - Full description and requirements
+  - All attached documents
+  - Start and end dates
+  - Active/closed status indicator
+  - Link to registration form
+  
+  The system validates active status:
+  ```csharp
+  private static bool ValidateActivo(Master _master)
+  {
+      var dateTime = DateTime.Now.Date;
+      var statud = false;
+
+      if (dateTime >= _master.NacionLicitantegStartDate)
+      {
+          if (dateTime <= _master.NacionLicitanteEndDate)
+          {
+              statud = true;
+          }
+      }
+      return statud;
+  }
+  ```
+</Accordion>
+
+<Accordion title="Download Documents - GET /Documento-Oficial-de-la-convocatoria">
+  **Purpose**: Serve official procurement documents
+  
+  **Access**: Public
+  
+  ```csharp
+  [Authorize(Roles = "UserApp")]
+  [AllowAnonymous]
+  [ActionName("Documento-Oficial-de-la-convocatoria")]
+  public FileResult OfficialLicitante(string routeFile)
+  {
+      return File($"/images/filesDocuments/{routeFile}", 
+                  "application/pdf", 
+                  $"{routeFile}.pdf");
+  }
+  ```
+</Accordion>
+
+## Controller Actions - Bidder Management
+
+### Admin Routes
+
+<Accordion title="List Bidders - GET /BiddingParticipants">
+  **Purpose**: View all bidder registrations
+  
+  **Access**: SuperAdmin, Admin
+  
+  **Features**:
+  - Complete list across all processes
+  - Shows associated procurement process
+  - Reference codes for tracking
+  - Submission dates
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  public async Task<IActionResult> Index()
+  {
+      var _biddingParticipantGetAll = await _biddingParticipantService.GetAll();
+      var _nacionLicitanteGellGetAll = await _nacionLicitante.GetAll();
+
+      var _model = from a in _biddingParticipantGetAll
+                   from b in _nacionLicitanteGellGetAll
+                   where a.MasterId == b.Id
+                   select new ModelViewBiddingParticipant
+                   {
+                       Id = a.Id,
+                       Ref = a.Ref.ToString(),
+                       NaturalPerson = a.NaturalPerson,
+                       Name = a.Name,
+                       IdentificationOrNit = a.IdentificationOrNit,
+                       Email = a.Email,
+                       City = a.City,
+                       Proposals = a.Proposals,
+                       DateCreate = a.DateCreate.ToString("MMMM dd, yyyy",
+                           CultureInfo.CreateSpecificCulture("es-CO")),
+                       NameNocionLicitante = b.NameMaster
+                   };
+
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="View Bidder Details - GET /BiddingParticipants/Details/{id}">
+  **Purpose**: View complete bidder information
+  
+  **Access**: SuperAdmin, Admin, UserApp
+  
+  Displays all submitted information and uploaded proposals.
+</Accordion>
+
+<Accordion title="Delete Bidder - GET/POST /BiddingParticipants/Delete/{id}">
+  **Purpose**: Remove invalid or duplicate bidder registration
+  
+  **Access**: SuperAdmin, Admin
+</Accordion>
+
+### Public/Bidder Routes
+
+<Accordion title="Register as Bidder - GET/POST /BiddingParticipants/Create">
+  **Purpose**: Register interest in procurement process
+  
+  **Access**: Public (UserApp role for authenticated users)
+  
+  **Validation**:
+  - Checks for duplicate ID/NIT per process
+  - Validates required contact information
+  - Ensures proposal file upload
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin,UserApp")]
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public async Task<IActionResult> Create(BiddingParticipantCreateDTO model)
+  {
+      int _masterId = Convert.ToInt16(model.MasterId);
+      var _identificationOrNit = _biddingParticipantService
+          .DuplicaIdentificationOrNit(model.IdentificationOrNit, _masterId);
+
+      if (_identificationOrNit)
+      {
+          ViewData["DuplicaIdentificationOrNit"] = 
+              $"Este documento {model.IdentificationOrNit} ya ha sido utilizado";
+          return View(model);
+      }
+
+      if (ModelState.IsValid)
+      {
+          var result = await _biddingParticipantService.Create(model);
+          _StatusMessaje = true;
+          return RedirectToAction("Details", new {@id = result.Id});
+      }
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Check Submission - GET /convocatorias/reference/{reference}">
+  **Purpose**: Track submission using reference code
+  
+  **Access**: SuperAdmin, Admin, UserApp
+  
+  Allows bidders to verify their submission was received and view confirmation.
+</Accordion>
+
+<Accordion title="Download Proposal - GET /Documento-participante">
+  **Purpose**: Download submitted proposal documents
+  
+  **Access**: SuperAdmin, Admin
+  
+  ```csharp
+  [Authorize(Roles = "SuperAdmin,Admin")]
+  [ActionName("Documento-participante")]
+  public FileResult OfficialLicitante(string nameFile, string routeFile)
+  {
+      return File($"/images/filesBiddingParticipant/{routeFile}", 
+                  "application/pdf", 
+                  $"{nameFile}-{DateTime.Now.ToString()}.pdf");
+  }
+  ```
+</Accordion>
+
+## Bidder Types
+
+The system supports two types of bidders:
+
+<CardGroup cols={2}>
+  <Card title="Natural Person" icon="user">
+    **NaturalPerson = true**
+    
+    Individual bidders with:
+    - Personal ID (Cédula)
+    - Individual name
+    - Personal contact information
+  </Card>
+  
+  <Card title="Legal Entity" icon="building">
+    **NaturalPerson = false**
+    
+    Company bidders with:
+    - Tax ID (NIT)
+    - Company name
+    - Corporate contact details
+  </Card>
+</CardGroup>
+
+## Process Status Logic
+
+Procurement processes have three states:
+
+<Tabs>
+  <Tab title="Upcoming">
+    Current date is before `NacionLicitantegStartDate`
+    - Visible but not accepting submissions
+    - Shows "Próximamente" or "Coming Soon"
+  </Tab>
+  
+  <Tab title="Active">
+    Current date is between start and end dates
+    - Accepting bidder registrations
+    - Shows "Activo" with deadline
+    - Registration link enabled
+  </Tab>
+  
+  <Tab title="Closed">
+    Current date is after `NacionLicitanteEndDate`
+    - No longer accepting submissions
+    - Shows "Cerrado" or "Closed"
+    - Information remains accessible
+  </Tab>
+</Tabs>
+
+## Reference Code System
+
+Each bidder receives a unique GUID reference code:
+
+```csharp
+public Guid Ref { get; set; }  // e.g., 3fa85f64-5717-4562-b3fc-2c963f66afa6
+```
+
+This code:
+- Confirms successful registration
+- Allows status tracking
+- Protects bidder privacy
+- Facilitates communication with ESP
+
+## Document Management
+
+Two types of documents are managed:
+
+### Procurement Documents
+- Stored in `/images/filesDocuments/`
+- PDF format
+- Linked via `FileDocument` entity
+- Publicly downloadable
+
+### Bidder Proposals
+- Stored in `/images/filesBiddingParticipant/`
+- PDF format
+- Confidential (admin access only)
+- Associated with `BiddingParticipant` records
+
+## Validation Rules
+
+<CardGroup cols={2}>
+  <Card title="Procurement Process" icon="clipboard-check">
+    - Unique process name
+    - End date after start date
+    - At least one document attached
+    - Valid description and requirements
+  </Card>
+  
+  <Card title="Bidder Registration" icon="user-check">
+    - Valid email address
+    - Phone or cellular required
+    - ID/NIT unique per process
+    - Proposal document required
+    - City and address required
+  </Card>
+</CardGroup>
+
+## Integration Points
+
+<AccordionGroup>
+  <Accordion title="Document Management">
+    Procurement processes link to documents through:
+    - Direct file attachments (FileDocument)
+    - References to existing legal documents (DelatedDocuments)
+  </Accordion>
+  
+  <Accordion title="Blog System">
+    Announce new procurement opportunities through blog posts
+  </Accordion>
+  
+  <Accordion title="Email Notifications">
+    Send confirmations to bidders upon successful registration
+  </Accordion>
+</AccordionGroup>
+
+## Compliance & Transparency
+
+<Note>
+  This system helps ESP comply with Colombian public procurement regulations including:
+  - Law 80 of 1993 (Public Contracting Statute)
+  - Law 1150 of 2007 (Public Procurement Reform)
+  - Decree 1082 of 2015 (Regulatory framework)
+  
+  All procurement activities are transparent and publicly accessible.
+</Note>
+
+## Related Features
+
+- [Document Management](/features/document-management) - Attach procurement documents
+- [PQRSD Management](/features/pqrsd-management) - Handle bidder questions
+- [Blog System](/features/blog-system) - Announce opportunities

@@ -1,0 +1,432 @@
+---
+title: 'Product & Service Catalog'
+description: 'Service directory showcasing ESP offerings to citizens'
+icon: 'grid-2'
+---
+
+## Overview
+
+The Product and Service Catalog provides a public directory of services offered by ESP Santa Fe de Antioquia. This feature helps citizens understand available services, access requirements, and relevant information about water, sewage, and related utilities.
+
+<Card title="Service Transparency" icon="hand-holding-water">
+  This catalog serves as the primary reference for citizens to discover and learn about ESP services, promoting transparency and accessibility.
+</Card>
+
+## User Workflows
+
+<Steps>
+  <Step title="Admin Creates Service">
+    Administrators add new services with:
+    - Service name
+    - Icon selection for visual identification
+    - Detailed description
+    - Service-specific information
+  </Step>
+  
+  <Step title="Public Discovery">
+    Citizens browse the service catalog at `/servicios` to discover available offerings
+  </Step>
+  
+  <Step title="Learn Details">
+    Users click on services to view comprehensive information including requirements, procedures, and contact details
+  </Step>
+</Steps>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Icon-Based Navigation" icon="icons">
+    Visual icons for quick service identification and improved user experience
+  </Card>
+  
+  <Card title="SEO-Friendly URLs" icon="link">
+    Automatic URL generation from service names for better searchability
+  </Card>
+  
+  <Card title="Detailed Descriptions" icon="file-lines">
+    Comprehensive HTML content explaining each service
+  </Card>
+  
+  <Card title="Public Access" icon="globe">
+    No authentication required for browsing services
+  </Card>
+</CardGroup>
+
+## Data Model
+
+```csharp
+public class Product
+{
+    public int ProductId { get; set; }             // Primary key
+    public string Name { get; set; }               // Service name
+    public string UrlProduct { get; set; }         // URL-friendly slug
+    public string Icono { get; set; }              // Icon identifier/path
+    public string Description { get; set; }        // HTML description
+    public DateTime DateCreate { get; set; }       // Creation timestamp
+}
+```
+
+### View Model
+
+```csharp
+public class ModelViewProduct
+{
+    public int ProductId { get; set; }
+    public string Name { get; set; }               // Service name
+    public string UrlProduct { get; set; }         // URL slug
+    public string Icono { get; set; }              // Icon reference
+    public string Description { get; set; }        // Full HTML content
+    public string DateCreate { get; set; }         // Formatted date
+}
+```
+
+## Controller Actions
+
+### Admin Routes
+
+<Accordion title="List Services - GET /Products">
+  **Purpose**: Display all services in admin dashboard
+  
+  **Access**: SuperAdmin, Admin (implicit - no [Authorize] attribute on Index)
+  
+  **Features**:
+  - Complete list of services
+  - Quick access to details and delete actions
+  - Visual preview with icons
+  
+  ```csharp
+  public async Task<IActionResult> Index()
+  {
+      var _product = from a in await _productService.GetAll()
+                     select new ModelViewProduct
+                     {
+                         ProductId = a.ProductId,
+                         Icono = a.Icono,
+                         Name = a.Name,
+                         UrlProduct = a.UrlProduct
+                     };
+      return View(_product);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Create Service - GET/POST /Products/Create">
+  **Purpose**: Add new service to catalog
+  
+  **Access**: Authenticated users
+  
+  **Validation**:
+  - Checks for duplicate service names
+  - Validates required fields
+  - Ensures icon is selected
+  
+  ```csharp
+  [HttpPost]
+  [ValidateAntiForgeryToken]
+  public async Task<IActionResult> Create(ProductCreateDto model)
+  {
+      var _urlName = _productService.DuplicaName(model.Name);
+
+      if (_urlName)
+      {
+          ViewData["DuplicaName"] = $"El Nombre {model.Name} ya ha sido utilizado, cambielo";
+          return View(model);
+      }
+
+      if (ModelState.IsValid)
+      {
+          var result = await _productService.Create(model);
+          return RedirectToAction(nameof(Index));
+      }
+      return View(model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="View Details (Admin) - GET /Products/Details/{id}">
+  **Purpose**: Preview service details in admin context
+  
+  **Access**: Authenticated users
+  
+  **Features**:
+  - Full service information
+  - Creation date
+  - Edit and delete options
+  
+  ```csharp
+  public async Task<IActionResult> Details(int? id)
+  {
+      if (id == null)
+      {
+          return NotFound();
+      }
+
+      var _product = await _productService.Details(id);
+
+      if (_product == null)
+      {
+          return NotFound();
+      }
+
+      var _model = new ModelViewProduct
+      {
+          ProductId = _product.ProductId,
+          Icono = _product.Icono,
+          Name = _product.Name,
+          Description = _product.Description,
+          UrlProduct = _product.UrlProduct,
+          DateCreate = _product.DateCreate.ToString("MMMM dd, yyyy",
+              CultureInfo.CreateSpecificCulture("es-CO"))
+      };
+
+      ViewData["admin"] = true;
+      return View(_model);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Delete Service - GET/POST /Products/Delete/{id}">
+  **Purpose**: Remove service from catalog
+  
+  **Access**: Authenticated users
+  
+  **Use Cases**:
+  - Service is discontinued
+  - Service is consolidated with another
+  - Information is outdated and needs recreation
+</Accordion>
+
+### Public Routes
+
+<Accordion title="Service Catalog - GET /servicios">
+  **Purpose**: Display all services to public
+  
+  **Access**: Public (no authentication)
+  
+  **Features**:
+  - Grid layout with service icons
+  - Service names and brief descriptions
+  - Click through to detailed information
+  - Responsive design for mobile access
+  
+  ```csharp
+  [Route("servicios")]
+  public async Task<IActionResult> ListProducts()
+  {
+      var _product = from a in await _productService.GetAll()
+                     select new ModelViewProduct
+                     {
+                         ProductId = a.ProductId,
+                         Icono = a.Icono,
+                         Name = a.Name,
+                         Description = a.Description,
+                         UrlProduct = a.UrlProduct
+                     };
+      return View(_product);
+  }
+  ```
+</Accordion>
+
+## Typical Services
+
+Common services for a public utilities company like ESP:
+
+<CardGroup cols={2}>
+  <Card title="Water Connection" icon="droplet">
+    New residential and commercial water service installations
+  </Card>
+  
+  <Card title="Sewage Connection" icon="pipe-valve">
+    Connection to municipal sewage system
+  </Card>
+  
+  <Card title="Bill Payment" icon="credit-card">
+    Payment options and billing information
+  </Card>
+  
+  <Card title="Service Repairs" icon="wrench">
+    Reporting and scheduling repair services
+  </Card>
+  
+  <Card title="Water Quality Testing" icon="flask">
+    Information about water quality and testing procedures
+  </Card>
+  
+  <Card title="Account Management" icon="user-gear">
+    Name changes, ownership transfers, account updates
+  </Card>
+</CardGroup>
+
+## Icon System
+
+The `Icono` field can reference:
+
+<Tabs>
+  <Tab title="Font Icons">
+    References to icon fonts like FontAwesome or Material Icons:
+    ```html
+    <i class="fas fa-droplet"></i>
+    ```
+    Stored as: `"fas fa-droplet"`
+  </Tab>
+  
+  <Tab title="Image Files">
+    Path to uploaded icon images:
+    ```html
+    <img src="/images/icons/water-connection.svg">
+    ```
+    Stored as: `"/images/icons/water-connection.svg"`
+  </Tab>
+  
+  <Tab title="SVG Code">
+    Direct SVG markup for custom icons
+  </Tab>
+</Tabs>
+
+## Data Transfer Object
+
+```csharp
+public class ProductCreateDto
+{
+    [Required(ErrorMessage = "El nombre es requerido")]
+    [MaxLength(150)]
+    [DisplayName("Nombre del servicio")]
+    public string Name { get; set; }
+    
+    [Required(ErrorMessage = "La descripción es requerida")]
+    [AllowHtml]
+    [DataType(DataType.MultilineText)]
+    [DisplayName("Descripción")]
+    public string Description { get; set; }
+    
+    [Required(ErrorMessage = "El ícono es requerido")]
+    [DisplayName("Ícono")]
+    public string Icono { get; set; }
+}
+```
+
+## Service Content Structure
+
+When creating service descriptions, include:
+
+<Steps>
+  <Step title="Service Overview">
+    Brief introduction explaining what the service is and who it's for
+  </Step>
+  
+  <Step title="Requirements">
+    List of documents, prerequisites, or conditions needed
+  </Step>
+  
+  <Step title="Process">
+    Step-by-step explanation of how to request or use the service
+  </Step>
+  
+  <Step title="Fees & Timeline">
+    Cost information and expected timeframes
+  </Step>
+  
+  <Step title="Contact Information">
+    Relevant department or person to contact for questions
+  </Step>
+</Steps>
+
+## Example Service Description
+
+```html
+<h2>Conexión de Acueducto</h2>
+
+<h3>¿Qué es?</h3>
+<p>Servicio de instalación de nueva conexión de agua potable para viviendas 
+y negocios en el municipio de Santa Fe de Antioquia.</p>
+
+<h3>Requisitos</h3>
+<ul>
+  <li>Copia de documento de identidad</li>
+  <li>Certificado de tradición y libertad del inmueble</li>
+  <li>Paz y salvo de impuesto predial</li>
+</ul>
+
+<h3>Proceso</h3>
+<ol>
+  <li>Presentar solicitud en oficinas de ESP</li>
+  <li>Inspección técnica del predio (3-5 días hábiles)</li>
+  <li>Cotización y pago de derechos de conexión</li>
+  <li>Instalación (7-10 días hábiles)</li>
+</ol>
+
+<h3>Costos</h3>
+<p>Los costos varían según el tipo de inmueble. Solicite cotización.</p>
+
+<h3>Contacto</h3>
+<p>Departamento de Nuevas Conexiones<br>
+Teléfono: (604) 853-1234 ext. 105<br>
+Email: conexiones@espsantafe.gov.co</p>
+```
+
+## Service Layer
+
+```csharp
+public interface IProductService
+{
+    Task<IEnumerable<Product>> GetAll();
+    Task<Product> GetById(int? id);
+    Task<Product> Details(int? id);
+    Task<Product> Create(ProductCreateDto model);
+    Task DeleteConfirmed(int id);
+    bool ProductExists(int id);
+    bool DuplicaName(string name);
+}
+```
+
+## URL Generation
+
+Service URLs are automatically generated from names:
+
+- "Conexión de Acueducto" → `/servicios/conexion-de-acueducto`
+- "Pago de Factura" → `/servicios/pago-de-factura`
+- "Reparación de Fugas" → `/servicios/reparacion-de-fugas`
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Content Writing">
+    - Use clear, citizen-friendly language
+    - Avoid technical jargon when possible
+    - Provide specific examples
+    - Include contact information
+    - Update content regularly
+  </Accordion>
+  
+  <Accordion title="Icon Selection">
+    - Choose intuitive, recognizable icons
+    - Maintain consistent icon style across services
+    - Ensure icons are readable at small sizes
+    - Use appropriate colors for ESP branding
+  </Accordion>
+  
+  <Accordion title="Organization">
+    - Group related services together
+    - Use logical naming conventions
+    - Consider adding categories (future enhancement)
+    - Prioritize most-requested services
+  </Accordion>
+</AccordionGroup>
+
+## Future Enhancements
+
+<Note>
+  Consider implementing:
+  - Service categories/grouping
+  - Search and filter functionality
+  - Online service request forms
+  - Service status tracking
+  - Integration with PQRSD system
+  - Downloadable PDF guides
+</Note>
+
+## Related Features
+
+- [PQRSD Management](/features/pqrsd-management) - Citizens can request services
+- [Document Management](/features/document-management) - Link service forms and requirements
+- [Blog System](/features/blog-system) - Announce new services

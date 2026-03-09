@@ -1,0 +1,369 @@
+---
+title: 'Production Configuration'
+description: 'Configure ESP Santa Fe de Antioquia for production deployment'
+---
+
+## Configuration Overview
+
+ESP Santa Fe de Antioquia uses `appsettings.json` for application configuration. For production, you should create environment-specific configuration files and use secure methods to store sensitive information.
+
+## Configuration Files
+
+The application supports multiple configuration files:
+
+- `appsettings.json` - Base configuration (should not contain secrets)
+- `appsettings.Development.json` - Development-specific settings
+- `appsettings.Production.json` - Production-specific settings (create this file)
+
+<Note>
+  Configuration files are loaded in order, with later files overriding earlier ones. This allows you to keep base settings in `appsettings.json` and override them per environment.
+</Note>
+
+## Creating Production Configuration
+
+Create `appsettings.Production.json` in the `src/prjESPSantaFeAnt` directory:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=YOUR_SERVER;Database=BDESPSantaFeAnt;User Id=YOUR_USER;Password=YOUR_PASSWORD;MultipleActiveResultSets=true;Encrypt=True;TrustServerCertificate=False",
+    "SendGrid_api_key": "YOUR_SENDGRID_API_KEY"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Warning",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information",
+      "Microsoft.EntityFrameworkCore": "Warning"
+    }
+  },
+  "AllowedHosts": "yourdomain.com,www.yourdomain.com"
+}
+```
+
+<Warning>
+  Never commit `appsettings.Production.json` to source control if it contains sensitive information. Add it to `.gitignore` and manage it separately.
+</Warning>
+
+## Connection String Configuration
+
+### SQL Server Connection String
+
+The application uses Entity Framework Core to connect to SQL Server. The connection string is configured in `Startup.cs:28-30`:
+
+```csharp
+services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(
+        Configuration.GetConnectionString("DefaultConnection")));
+```
+
+#### Production Connection String Options
+
+**Option 1: SQL Server Authentication**
+```
+Server=your-server.database.windows.net;Database=BDESPSantaFeAnt;User Id=sqladmin;Password=YourSecurePassword123!;MultipleActiveResultSets=true;Encrypt=True;TrustServerCertificate=False
+```
+
+**Option 2: Windows Authentication** (if on Windows Server in domain)
+```
+Server=YOUR_SERVER;Database=BDESPSantaFeAnt;Trusted_Connection=True;MultipleActiveResultSets=true
+```
+
+**Option 3: Azure SQL Database**
+```
+Server=tcp:yourserver.database.windows.net,1433;Initial Catalog=BDESPSantaFeAnt;Persist Security Info=False;User ID=sqladmin;Password=YourPassword;MultipleActiveResultSets=True;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;
+```
+
+<Note>
+  The `MultipleActiveResultSets=true` option is required by the application and allows multiple result sets to be processed simultaneously.
+</Note>
+
+### SendGrid API Key Configuration
+
+The application uses SendGrid for email delivery. The API key is stored in the `ConnectionStrings` section (see `EmailSendGrid.cs:21`):
+
+```json
+"ConnectionStrings": {
+  "SendGrid_api_key": "SG.your-actual-api-key-here"
+}
+```
+
+To obtain a SendGrid API key:
+
+<Steps>
+  <Step title="Create SendGrid Account">
+    Sign up for a SendGrid account at https://sendgrid.com
+  </Step>
+  
+  <Step title="Generate API Key">
+    Navigate to Settings > API Keys and create a new API key with "Mail Send" permissions.
+  </Step>
+  
+  <Step title="Configure Sender Email">
+    The application sends from `espsantafedeantioquiasoporte@gmail.com` (see `EmailSendGrid.cs:33`). Verify this email address in SendGrid or update it to your verified sender.
+  </Step>
+</Steps>
+
+<Warning>
+  SendGrid API keys are sensitive credentials. Never commit them to source control. Use environment variables or Azure Key Vault in production.
+</Warning>
+
+## Environment Variables (Recommended)
+
+For better security, use environment variables instead of storing secrets in configuration files:
+
+### On Windows Server (IIS)
+
+Set environment variables at the Application Pool level:
+
+```powershell
+# Open IIS Manager
+# Select Application Pool > Advanced Settings > Environment Variables
+# Add:
+CONNECTIONSTRINGS__DEFAULTCONNECTION=Server=...;Database=BDESPSantaFeAnt;...
+CONNECTIONSTRINGS__SENDGRID_API_KEY=SG.your-key-here
+```
+
+Or use `web.config`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+      </handlers>
+      <aspNetCore processPath="dotnet" 
+                  arguments=".\prjESPSantaFeAnt.dll" 
+                  stdoutLogEnabled="false" 
+                  stdoutLogFile=".\logs\stdout" 
+                  hostingModel="inprocess">
+        <environmentVariables>
+          <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+          <environmentVariable name="ConnectionStrings__DefaultConnection" value="Server=..." />
+          <environmentVariable name="ConnectionStrings__SendGrid_api_key" value="SG.your-key" />
+        </environmentVariables>
+      </aspNetCore>
+    </system.webServer>
+  </location>
+</configuration>
+```
+
+<Note>
+  ASP.NET Core uses double underscores (`__`) to represent nested configuration hierarchy in environment variables.
+</Note>
+
+## Logging Configuration
+
+The application uses ASP.NET Core's built-in logging. Configure log levels in `appsettings.Production.json`:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Warning",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information",
+      "Microsoft.EntityFrameworkCore": "Error"
+    },
+    "Console": {
+      "IncludeScopes": false
+    },
+    "EventLog": {
+      "LogLevel": {
+        "Default": "Warning"
+      }
+    }
+  }
+}
+```
+
+### Log Levels Explained
+
+- **Trace** (0): Most verbose, for detailed diagnostic information
+- **Debug** (1): For debugging during development
+- **Information** (2): General informational messages
+- **Warning** (3): Unexpected events that don't stop execution
+- **Error** (4): Errors and exceptions
+- **Critical** (5): Critical failures requiring immediate attention
+- **None** (6): Disable logging
+
+<Warning>
+  In production, avoid using `Trace` or `Debug` log levels as they generate excessive logs and may impact performance.
+</Warning>
+
+## Identity Configuration
+
+The application uses ASP.NET Core Identity for authentication (configured in `Startup.cs:32-61`).
+
+### Current Settings
+
+```csharp
+services.AddIdentity<IdentityUser, IdentityRole>(
+    options => options.SignIn.RequireConfirmedAccount = true)
+   .AddEntityFrameworkStores<ApplicationDbContext>()
+   .AddDefaultTokenProviders();
+
+// Token lifespan: 7 days
+services.Configure<DataProtectionTokenProviderOptions>(o =>
+    o.TokenLifespan = TimeSpan.FromDays(7));
+
+// Password requirements
+options.Password.RequireDigit = false;
+options.Password.RequireLowercase = false;
+options.Password.RequireNonAlphanumeric = false;
+options.Password.RequireUppercase = true;
+options.Password.RequiredLength = 4;
+
+// Lockout settings
+options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+options.Lockout.MaxFailedAccessAttempts = 5;
+```
+
+### Recommended Production Changes
+
+For production, consider strengthening password requirements in `Startup.cs`:
+
+```csharp
+options.Password.RequireDigit = true;
+options.Password.RequireLowercase = true;
+options.Password.RequireNonAlphanumeric = true;
+options.Password.RequireUppercase = true;
+options.Password.RequiredLength = 8;
+options.Password.RequiredUniqueChars = 4;
+```
+
+<Warning>
+  The current password policy is weak (4 characters, only uppercase required). Strengthen this for production to improve security.
+</Warning>
+
+## Cookie Configuration
+
+Authentication cookies are configured in `Startup.cs:63-72`:
+
+```csharp
+services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.HttpOnly = true;
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(180);
+    options.LoginPath = "/Identity/Account/Login";
+    options.AccessDeniedPath = "/Identity/Account/AccessDenied";
+    options.SlidingExpiration = true;
+});
+```
+
+### Production Recommendations
+
+Add these cookie security settings:
+
+```csharp
+options.Cookie.HttpOnly = true;
+options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // Require HTTPS
+options.Cookie.SameSite = SameSiteMode.Strict;
+options.Cookie.Name = ".ESPSantaFeAnt.Auth";
+```
+
+## Environment Detection
+
+<Warning>
+  **CRITICAL ISSUE**: The environment detection in `Startup.cs:103-113` is inverted!
+  
+  ```csharp
+  if (env.IsProduction())
+  {
+      app.UseDeveloperExceptionPage();  // Should NOT be in production!
+      app.UseDatabaseErrorPage();
+  }
+  else
+  {
+      app.UseExceptionHandler("/Home/Error");  // Should be in production!
+      app.UseHsts();
+  }
+  ```
+  
+  This should be fixed before deployment. The correct code should be:
+  
+  ```csharp
+  if (env.IsDevelopment())
+  {
+      app.UseDeveloperExceptionPage();
+      app.UseDatabaseErrorPage();
+  }
+  else
+  {
+      app.UseExceptionHandler("/Home/Error");
+      app.UseHsts();
+  }
+  ```
+</Warning>
+
+## Allowed Hosts
+
+Configure allowed hostnames in `appsettings.Production.json`:
+
+```json
+{
+  "AllowedHosts": "espsantafe.gov.co,www.espsantafe.gov.co"
+}
+```
+
+This prevents host header attacks by restricting which hostnames the application will respond to.
+
+## IIS-Specific Configuration
+
+Create or update `web.config` in the publish folder:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+      </handlers>
+      <aspNetCore processPath="dotnet"
+                  arguments=".\prjESPSantaFeAnt.dll"
+                  stdoutLogEnabled="true"
+                  stdoutLogFile=".\logs\stdout"
+                  hostingModel="inprocess">
+        <environmentVariables>
+          <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+        </environmentVariables>
+      </aspNetCore>
+      <httpProtocol>
+        <customHeaders>
+          <remove name="X-Powered-By" />
+          <add name="X-Frame-Options" value="SAMEORIGIN" />
+          <add name="X-Content-Type-Options" value="nosniff" />
+        </customHeaders>
+      </httpProtocol>
+    </system.webServer>
+  </location>
+</configuration>
+```
+
+## Next Steps
+
+After configuring your production settings:
+
+- [Database Setup](/deployment/database-setup) - Set up and migrate your production database
+- Test your configuration thoroughly before going live
+- Set up monitoring and health checks
+
+## Configuration Checklist
+
+Before deploying:
+
+- [ ] Created `appsettings.Production.json` with production settings
+- [ ] Configured production SQL Server connection string
+- [ ] Set up SendGrid API key
+- [ ] Configured appropriate log levels
+- [ ] Set `AllowedHosts` to your domain(s)
+- [ ] Fixed environment detection logic in `Startup.cs`
+- [ ] Strengthened password requirements
+- [ ] Enabled HTTPS-only cookies
+- [ ] Created `web.config` for IIS
+- [ ] Set `ASPNETCORE_ENVIRONMENT=Production`
+- [ ] Verified sender email in SendGrid
+- [ ] Tested database connectivity
