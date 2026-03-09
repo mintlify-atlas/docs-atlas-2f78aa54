@@ -673,3 +673,814 @@ catch (Exception ex)
 ### Async/Await
 
 All database operations are asynchronous for better performance.
+
+---
+
+## INacionLicitanteService
+
+Manages public bidding announcements (Licitaciones) with document attachments.
+
+**Namespace:** `services`  
+**Implementation:** `NacionLicitanteService`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Entity Framework database context
+</ParamField>
+
+<ParamField path="_mapper" type="IMapper">
+  AutoMapper for DTO conversions
+</ParamField>
+
+<ParamField path="_formatStringUrl" type="IFormatStringUrl">
+  URL slug generation service
+</ParamField>
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  File upload service for IIS
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all bidding announcements.
+
+```csharp
+Task<IEnumerable<Master>> GetAll()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Master>>">
+  Collection where `NacionLicitante == true`
+</ResponseField>
+
+**Query:**
+```csharp
+return await _context.Masters
+    .AsNoTracking()
+    .Where(x => x.NacionLicitante == true)
+    .ToListAsync();
+```
+
+#### GetById (int)
+
+Retrieves announcement by ID with file documents.
+
+<ParamField path="id" type="int?" required>
+  Announcement identifier
+</ParamField>
+
+```csharp
+Task<Master> GetById(int? id)
+```
+
+<ResponseField name="return" type="Task<Master>">
+  Master entity with `FileDocument` collection included
+</ResponseField>
+
+#### GetById (string)
+
+Retrieves announcement by URL slug.
+
+<ParamField path="nacionLicitante" type="string" required>
+  URL-friendly identifier
+</ParamField>
+
+```csharp
+Task<Master> GetById(string nacionLicitante)
+```
+
+#### Details
+
+Retrieves announcement details as DTO.
+
+```csharp
+Task<NacionLicitanteDto> Details(int? id)
+```
+
+#### Create
+
+Creates new bidding announcement with cover image and optional file attachments using transaction.
+
+<ParamField body="model" type="NacionLicitanteCreateDto" required>
+  Announcement data
+</ParamField>
+
+```csharp
+Task Create(NacionLicitanteCreateDto model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-transaction">
+    1. Begin database transaction
+    2. Generate URL slug from name
+    3. Upload cover image to `nacionLicitante` folder
+    4. Create Master record with:
+       - NacionLicitante = true
+       - Start and end dates
+       - Statud = true
+    5. If files provided, loop through each:
+       - Format filename to URL-friendly slug
+       - Upload to `filesDocuments` folder
+       - Create FileDocument record with MasterId
+    6. Commit transaction
+    7. Rollback on any exception
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+await _nacionLicitante.Create(new NacionLicitanteCreateDto
+{
+    NameMaster = "Licitación Pública 001-2026",
+    Description = "<p>Detalles de la convocatoria...</p>",
+    CoverPage = imageFile,
+    NacionLicitantegStartDate = new DateTime(2026, 3, 1),
+    NacionLicitanteEndDate = new DateTime(2026, 3, 31),
+    NacionLicitantegFile = new List<IFormFile> { pdfFile1, pdfFile2 }
+});
+```
+
+#### FilesDocuments
+
+Retrieves all file documents in system.
+
+```csharp
+Task<IEnumerable<FileDocument>> FilesDocuments()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<FileDocument>>">
+  All FileDocument records
+</ResponseField>
+
+#### DelatedDocuments
+
+Retrieves documents associated with specific announcement.
+
+<ParamField path="id" type="int" required>
+  Master/announcement ID
+</ParamField>
+
+```csharp
+Task<IEnumerable<Document>> DelatedDocuments(int id)
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Document>>">
+  Documents where `MasterId == id`
+</ResponseField>
+
+#### DeleteConfirmed
+
+Removes announcement with complete cascade deletion using transaction.
+
+<ParamField path="id" type="int" required>
+  Announcement ID to delete
+</ParamField>
+
+```csharp
+Task DeleteConfirmed(int id)
+```
+
+<ResponseField name="cascade-deletion" type="object">
+  <Expandable title="deletion-steps">
+    1. Begin transaction
+    2. Load Master with Documents and FileDocument collections
+    3. Delete cover page file from `nacionLicitante` folder
+    4. For each associated Document:
+       - Load its FileDocument collection
+       - Delete each physical file from `filesDocuments`
+       - Remove FileDocument records
+       - Remove Document record
+    5. For each FileDocument linked directly to Master:
+       - Delete physical file
+       - Remove FileDocument record
+    6. Remove Master record
+    7. Commit transaction
+    8. Rollback on any exception
+  </Expandable>
+</ResponseField>
+
+#### NacionLicitantegExists
+
+Validates announcement existence.
+
+```csharp
+bool NacionLicitantegExists(int id)
+```
+
+#### DuplicaName
+
+Checks for duplicate announcement names.
+
+<ParamField path="_stringName" type="string" required>
+  Name to validate
+</ParamField>
+
+```csharp
+bool DuplicaName(string _stringName)
+```
+
+---
+
+## IBrigadeService
+
+Manages community brigade events.
+
+**Namespace:** `services`  
+**Implementation:** `BrigadeService`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context
+</ParamField>
+
+<ParamField path="_mapper" type="IMapper">
+  AutoMapper instance
+</ParamField>
+
+<ParamField path="_formatStringUrl" type="IFormatStringUrl">
+  URL slug generator
+</ParamField>
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  File upload handler
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all brigade events ordered by creation date.
+
+```csharp
+Task<IEnumerable<Master>> GetAll()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Master>>">
+  Brigade entries (Master where `Brigade == true`) ordered newest first
+</ResponseField>
+
+**Query:**
+```csharp
+return await _context.Masters
+    .AsNoTracking()
+    .Where(x => x.Brigade == true)
+    .OrderByDescending(x => x.DateCreate)
+    .ToListAsync();
+```
+
+#### GetById (int)
+
+Retrieves brigade by numeric ID.
+
+<ParamField path="id" type="int?" required>
+  Brigade identifier
+</ParamField>
+
+```csharp
+Task<Master> GetById(int? id)
+```
+
+#### GetById (string)
+
+Retrieves brigade by URL slug.
+
+<ParamField path="urBrigade" type="string" required>
+  URL-friendly identifier
+</ParamField>
+
+```csharp
+Task<Master> GetById(string urBrigade)
+```
+
+#### Details
+
+Retrieves brigade details as DTO.
+
+```csharp
+Task<BrigadeDto> Details(int? id)
+```
+
+#### Create
+
+Creates new brigade event with cover image.
+
+<ParamField body="model" type="BrigadeCreateDto" required>
+  Brigade data including event date
+</ParamField>
+
+```csharp
+Task<BrigadeDto> Create(BrigadeCreateDto model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-steps">
+    1. Generate URL slug from brigade name
+    2. Upload cover image to `brigade` folder
+    3. Create Master record with:
+       - Brigade = true
+       - DateBrigade (event date)
+       - Statud = true
+       - Author information
+    4. Set creation timestamp
+    5. Save to database
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+var brigade = await _brigadeService.Create(new BrigadeCreateDto
+{
+    NameMaster = "Jornada de Salud Barrio Centro",
+    Description = "<p>Atención médica gratuita...</p>",
+    Author = "Secretaría de Salud",
+    DateBrigade = new DateTime(2026, 4, 15),
+    CoverPage = imageFile
+});
+// Creates URL: /brigadas/jornada-de-salud-barrio-centro
+```
+
+#### DeleteConfirmed
+
+Removes brigade and cover image.
+
+<ParamField path="id" type="int" required>
+  Brigade ID
+</ParamField>
+
+```csharp
+Task DeleteConfirmed(int id)
+```
+
+<ResponseField name="process" type="string">
+  Deletes cover page from `brigade` folder, then removes Master record
+</ResponseField>
+
+#### BrigadeExists
+
+Validates brigade existence.
+
+```csharp
+bool BrigadeExists(int id)
+```
+
+#### DuplicaName
+
+Checks for duplicate brigade names.
+
+```csharp
+bool DuplicaName(string _stringName)
+```
+
+---
+
+## IEmployeeService
+
+Manages employee records and staff directory.
+
+**Namespace:** `services`  
+**Implementation:** `EmployeeService`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context
+</ParamField>
+
+<ParamField path="_mapper" type="IMapper">
+  AutoMapper instance
+</ParamField>
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  File upload service
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all employees ordered by creation date.
+
+```csharp
+Task<IEnumerable<Employee>> GetAll()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Employee>>">
+  All employee records ordered newest first
+</ResponseField>
+
+**Query:**
+```csharp
+return await _context.Employees
+    .AsNoTracking()
+    .OrderByDescending(x => x.DateCreate)
+    .ToListAsync();
+```
+
+#### GetById
+
+Retrieves employee by ID.
+
+<ParamField path="id" type="int?" required>
+  Employee identifier
+</ParamField>
+
+```csharp
+Task<Employee> GetById(int? id)
+```
+
+#### Details
+
+Retrieves employee details as DTO.
+
+```csharp
+Task<EmployeeDto> Details(int? id)
+```
+
+#### Create
+
+Creates new employee record with photo.
+
+<ParamField body="model" type="EmployeeCreateDto" required>
+  Employee data
+</ParamField>
+
+```csharp
+Task<EmployeeDto> Create(EmployeeCreateDto model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-steps">
+    1. Upload employee photo to `employees` folder
+    2. Create Employee entity with:
+       - Name
+       - Occupation
+       - CoverPage (photo filename)
+       - DateCreate (automatic)
+    3. Save to database
+    4. Return mapped DTO
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+var employee = await _employeeService.Create(new EmployeeCreateDto
+{
+    Name = "María García López",
+    Occupation = "Gerente General",
+    CoverPage = photoFile
+});
+```
+
+#### DeleteConfirmed
+
+Removes employee and photo.
+
+<ParamField path="id" type="int" required>
+  Employee ID
+</ParamField>
+
+```csharp
+Task DeleteConfirmed(int id)
+```
+
+<ResponseField name="process" type="string">
+  Deletes photo from `employees` folder, then removes Employee record
+</ResponseField>
+
+---
+
+## IProductService
+
+Manages service products offered by the organization.
+
+**Namespace:** `services`  
+**Implementation:** `ProductService`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context
+</ParamField>
+
+<ParamField path="_mapper" type="IMapper">
+  AutoMapper instance
+</ParamField>
+
+<ParamField path="_formatStringUrl" type="IFormatStringUrl">
+  URL slug generator
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all products ordered by creation date.
+
+```csharp
+Task<IEnumerable<Product>> GetAll()
+```
+
+<ResponseField name="return" type="Task<IEnumerable<Product>>">
+  All products ordered newest first
+</ResponseField>
+
+#### GetById
+
+Retrieves product by numeric ID.
+
+```csharp
+Task<Product> GetById(int? id)
+```
+
+#### Details (int)
+
+Retrieves product details by ID.
+
+```csharp
+Task<ProductDto> Details(int? id)
+```
+
+#### Details (string)
+
+Retrieves product details by URL slug.
+
+<ParamField path="urlProduct" type="string" required>
+  URL-friendly product identifier
+</ParamField>
+
+```csharp
+Task<ProductDto> Details(string urlProduct)
+```
+
+#### Create
+
+Creates new product/service.
+
+<ParamField body="model" type="ProductCreateDto" required>
+  Product data
+</ParamField>
+
+```csharp
+Task<ProductDto> Create(ProductCreateDto model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-steps">
+    1. Generate URL slug from product name
+    2. Append `.svg` extension to icon name
+    3. Create Product entity with:
+       - Name
+       - UrlProduct (slug)
+       - Icono (icon filename)
+       - Description
+       - DateCreate
+    4. Save to database
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+var product = await _productService.Create(new ProductCreateDto
+{
+    Name = "Instalación de Medidores",
+    Icono = "icon-meter",  // Becomes "icon-meter.svg"
+    Description = "<p>Servicio de instalación...</p>"
+});
+// Creates URL: /servicios/instalacion-de-medidores
+```
+
+#### DeleteConfirmed
+
+Removes product record.
+
+```csharp
+Task DeleteConfirmed(int id)
+```
+
+#### ProductExists
+
+Validates product existence.
+
+```csharp
+bool ProductExists(int id)
+```
+
+#### DuplicaName
+
+Checks for duplicate product names.
+
+```csharp
+bool DuplicaName(string _stringName)
+```
+
+---
+
+## IPQRSDService
+
+Manages PQRSD submissions (Petitions, Complaints, Claims, Suggestions, Congratulations) with email notifications.
+
+**Namespace:** `services`  
+**Implementation:** `PQRSDService`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context
+</ParamField>
+
+<ParamField path="_mapper" type="IMapper">
+  AutoMapper instance
+</ParamField>
+
+<ParamField path="_formatStringUrl" type="IFormatStringUrl">
+  URL formatter
+</ParamField>
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  File upload service
+</ParamField>
+
+<ParamField path="_emailSendGrid" type="IEmailSendGrid">
+  SendGrid email service
+</ParamField>
+
+<ParamField path="_hostingEnvironment" type="IHostingEnvironment">
+  Access to web root for email templates
+</ParamField>
+
+### Methods
+
+#### GetAll
+
+Retrieves all PQRSD submissions.
+
+```csharp
+IEnumerable<PQRSD> GetAll()
+```
+
+<ResponseField name="return" type="IEnumerable<PQRSD>">
+  All PQRSD records
+</ResponseField>
+
+#### GetById
+
+Retrieves PQRSD by unique identifier.
+
+<ParamField path="id" type="Guid?" required>
+  PQRSD identifier
+</ParamField>
+
+```csharp
+PQRSD GetById(Guid? id)
+```
+
+#### Details
+
+Retrieves PQRSD details as DTO.
+
+```csharp
+PQRSDDto Details(Guid? id)
+```
+
+#### Create
+
+Creates new PQRSD submission and sends email notifications.
+
+<ParamField body="model" type="PQRSDCreateDto" required>
+  PQRSD data
+</ParamField>
+
+```csharp
+Task<PQRSDDto> Create(PQRSDCreateDto model)
+```
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-and-notification">
+    1. Generate unique Guid for PQRSDID
+    2. Set creation timestamp
+    3. Create PQRSD entity with:
+       - NamePerson
+       - Email
+       - PQRSDName (subject)
+       - Description
+       - NameSotypeOfRequest (type)
+       - IsAnswered = false
+    4. Save to database
+    5. Load HTML email template from `/emailTemplete/PQRSDEmail.html`
+    6. Replace placeholders: {PQRSD}, {Name}, {Email}, {Asunto}, {Description}
+    7. Send emails to:
+       - Citizen email address
+       - asesoria@espsantafedeantioquia.co
+       - admin@espsantafedeantioquia.co
+  </Expandable>
+</ResponseField>
+
+**Example:**
+```csharp
+var pqrsd = await _pqrsdService.Create(new PQRSDCreateDto
+{
+    NamePerson = "Carlos Ramírez",
+    Email = "carlos@example.com",
+    PQRSDName = "Solicitud de instalación de servicio",
+    Description = "Requiero instalación...",
+    NameSotypeOfRequest = "Petición"
+});
+// Returns PQRSDID (Guid) for tracking
+```
+
+#### Review
+
+Administrative response to PQRSD submission.
+
+<ParamField path="id" type="Guid" required>
+  PQRSD identifier
+</ParamField>
+
+<ParamField body="model" type="ReviewCreateDto" required>
+  Admin response data
+</ParamField>
+
+```csharp
+Boolean Review(Guid id, ReviewCreateDto model)
+```
+
+<ResponseField name="updates" type="object">
+  <Expandable title="review-updates">
+    - Sets `Reply` field with admin response
+    - Sets `IsAnswered = true`
+    - Sets `AnswerDate = DateTime.Now`
+    - Saves changes to database
+    - Returns true on success, false if ID not found
+  </Expandable>
+</ResponseField>
+
+#### DeleteConfirmed
+
+Removes PQRSD submission.
+
+<ParamField path="id" type="Guid" required>
+  PQRSD identifier
+</ParamField>
+
+```csharp
+Task DeleteConfirmed(Guid id)
+```
+
+---
+
+## Service Utilities Detail
+
+### File Storage Folders
+
+<ResponseField name="nacionLicitante" type="folder">
+  Bidding announcement cover images
+</ResponseField>
+
+<ResponseField name="brigade" type="folder">
+  Brigade event cover images
+</ResponseField>
+
+<ResponseField name="employees" type="folder">
+  Employee photos
+</ResponseField>
+
+<ResponseField name="filesDocuments" type="folder">
+  PDF attachments for announcements and documents
+</ResponseField>
+
+<ResponseField name="PQRSD" type="folder">
+  PQRSD file attachments (currently unused)
+</ResponseField>
+
+### Email Templates
+
+Email templates are stored in `/emailTemplete/` directory:
+
+<ParamField name="PQRSDEmail.html" type="template">
+  PQRSD confirmation email with placeholders for dynamic content
+</ParamField>
+
+### Transaction Management
+
+Services that handle complex multi-step operations use database transactions:
+
+```csharp
+using var transaction = _context.Database.BeginTransaction();
+try
+{
+    // Multiple database operations
+    // File uploads
+    transaction.Commit();
+}
+catch (Exception ex)
+{
+    transaction.Rollback();
+}
+```
+
+**Used in:**
+- NacionLicitanteService.Create
+- NacionLicitanteService.DeleteConfirmed

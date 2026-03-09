@@ -326,9 +326,57 @@ var pqrsd = new PQRSD
 
 ---
 
+### Employee
+
+Organizational employees and staff members.
+
+**Namespace:** `model`  
+**Table:** `Employees`
+
+<ParamField path="EmployeeId" type="int">
+  Primary key
+</ParamField>
+
+<ParamField path="Name" type="string">
+  Full name of employee
+</ParamField>
+
+<ParamField path="CoverPage" type="string">
+  Employee photo filename
+</ParamField>
+
+<ParamField path="Occupation" type="string">
+  Job title or position
+</ParamField>
+
+<ParamField path="DateCreate" type="DateTime">
+  Record creation timestamp (auto-set in constructor)
+</ParamField>
+
+**Constructor behavior:**
+```csharp
+public Employee() 
+{
+    DateCreate = DateTime.Now;
+}
+```
+
+**Example:**
+```csharp
+var employee = new Employee
+{
+    Name = "María García López",
+    Occupation = "Gerente General",
+    CoverPage = "maria-garcia.jpg"
+    // DateCreate automatically set to DateTime.Now
+};
+```
+
+---
+
 ### Master
 
-Multi-purpose entity for blogs, announcements, and brigades.
+**Multi-purpose polymorphic entity** used for three distinct content types: blog posts, brigade events, and bidding announcements. The entity type is determined by Boolean flags.
 
 **Namespace:** `model`  
 **Table:** `Masters`
@@ -338,116 +386,296 @@ Multi-purpose entity for blogs, announcements, and brigades.
 </ParamField>
 
 <ParamField path="NameMaster" type="string">
-  Title/name
+  Title/name of the entry
 </ParamField>
 
 <ParamField path="UrlMaster" type="string">
-  URL slug
+  URL-friendly slug generated from NameMaster
 </ParamField>
 
 <ParamField path="Description" type="string">
-  HTML content
+  HTML content body (marked with `[AllowHtml]` and `[DataType(DataType.MultilineText)]`)
 </ParamField>
 
 <ParamField path="CoverPage" type="string">
-  Cover image filename
+  Cover image filename (stored in different folders based on type)
 </ParamField>
 
 <ParamField path="Statud" type="Boolean">
-  Active status
+  Active/inactive status for display
 </ParamField>
 
-<ParamField path="Brigade" type="Boolean">
-  Marks as brigade entry
-</ParamField>
-
-<ParamField path="DateBrigade" type="DateTime">
-  Brigade event date
-</ParamField>
+### Blog Post Properties
 
 <ParamField path="Blog" type="Boolean">
-  Marks as blog post
+  Set to `true` for blog posts/news articles
 </ParamField>
 
 <ParamField path="Author" type="string">
-  Blog post author
+  Author name for blog posts
 </ParamField>
 
+### Brigade Event Properties
+
+<ParamField path="Brigade" type="Boolean">
+  Set to `true` for brigade/health campaign events
+</ParamField>
+
+<ParamField path="DateBrigade" type="DateTime">
+  Scheduled date of the brigade event
+</ParamField>
+
+### Bidding Announcement Properties
+
 <ParamField path="NacionLicitante" type="Boolean">
-  Marks as bidding announcement
+  Set to `true` for public procurement announcements
 </ParamField>
 
 <ParamField path="NacionLicitantegStartDate" type="DateTime">
-  Bidding start date
+  Bidding period start date
 </ParamField>
 
 <ParamField path="NacionLicitanteEndDate" type="DateTime">
-  Bidding end date
+  Bidding period end date
 </ParamField>
 
+### Audit Properties
+
 <ParamField path="DateCreate" type="DateTime">
-  Creation timestamp
+  Record creation timestamp
 </ParamField>
 
 <ParamField path="DateUpdate" type="DateTime">
-  Last update timestamp
+  Last modification timestamp
 </ParamField>
 
+### Navigation Properties
+
 <ParamField path="BiddingParticipants" type="IList<BiddingParticipant>">
-  Related participants (when NacionLicitante = true)
+  Related bidding participants (when `NacionLicitante = true`)
 </ParamField>
 
 <ParamField path="FileDocument" type="ICollection<FileDocument>">
-  Attached files
+  File attachments directly linked to this Master entry
 </ParamField>
 
 <ParamField path="Documents" type="ICollection<Document>">
-  Related documents
+  Related Document entities (additional documentation)
 </ParamField>
 
-**Usage patterns:**
+### Entity Type Patterns
 
-<Expandable title="Blog Post">
+The Master table uses a **Single Table Inheritance** pattern where Boolean flags determine the entity type:
+
+<Expandable title="Blog Post Pattern">
 ```csharp
 var blogPost = new Master
 {
     NameMaster = "Nueva Obra en el Municipio",
     UrlMaster = "nueva-obra-en-el-municipio",
-    Description = "<p>Contenido...</p>",
-    Blog = true,
+    Description = "<p>Contenido del artículo...</p>",
+    CoverPage = "nueva-obra-2026.jpg", // Stored in /blog/ folder
+    Blog = true,                       // Blog flag
     Author = "Oficina de Comunicaciones",
     Statud = true,
     DateCreate = DateTime.Now
 };
+// Queried via: .Where(x => x.Blog == true)
+// Public URL: /noticias/nueva-obra-en-el-municipio
 ```
 </Expandable>
 
-<Expandable title="Bidding Announcement">
+<Expandable title="Bidding Announcement Pattern">
 ```csharp
 var announcement = new Master
 {
     NameMaster = "Licitación Pública 001-2026",
     UrlMaster = "licitacion-publica-001-2026",
-    NacionLicitante = true,
+    Description = "<p>Términos de referencia...</p>",
+    CoverPage = "licitacion-001.jpg", // Stored in /nacionLicitante/ folder
+    NacionLicitante = true,            // Bidding flag
     NacionLicitantegStartDate = new DateTime(2026, 3, 1),
     NacionLicitanteEndDate = new DateTime(2026, 3, 31),
-    Statud = true
+    Statud = true,
+    DateCreate = DateTime.Now
 };
+// Queried via: .Where(x => x.NacionLicitante == true)
+// Public URL: /convocatorias/licitacion-publica-001-2026
+// Active status calculated dynamically based on date range
 ```
 </Expandable>
 
-<Expandable title="Brigade Event">
+<Expandable title="Brigade Event Pattern">
 ```csharp
 var brigade = new Master
 {
     NameMaster = "Jornada de Salud Barrio Centro",
     UrlMaster = "jornada-salud-barrio-centro",
-    Brigade = true,
+    Description = "<p>Atención médica gratuita...</p>",
+    CoverPage = "brigada-salud-2026.jpg", // Stored in /brigade/ folder
+    Brigade = true,                        // Brigade flag
     DateBrigade = new DateTime(2026, 4, 15),
-    Statud = true
+    Author = "Secretaría de Salud",
+    Statud = true,
+    DateCreate = DateTime.Now
 };
+// Queried via: .Where(x => x.Brigade == true)
+// Public URL: /brigadas/jornada-salud-barrio-centro
 ```
 </Expandable>
+
+### Design Notes
+
+<ResponseField name="polymorphism" type="note">
+  The Master entity consolidates three content types into a single table. Only one of the Boolean flags (`Blog`, `Brigade`, `NacionLicitante`) should be `true` per record.
+</ResponseField>
+
+<ResponseField name="storage" type="note">
+  Cover images are stored in different folders based on entity type:
+  - Blog: `/images/blog/`
+  - Brigade: `/images/brigade/`
+  - NacionLicitante: `/images/nacionLicitante/`
+</ResponseField>
+
+<ResponseField name="cascading" type="note">
+  Deleting a Master entry cascades to:
+  - BiddingParticipants (for announcements)
+  - FileDocument (direct attachments)
+  - Documents (related documentation)
+</ResponseField>
+
+---
+
+### FileDocument
+
+**File attachment entity** for linking PDF and other documents to Master entries or Document records. Supports multiple file attachments per parent entity.
+
+**Namespace:** `model`  
+**Table:** `FileDocuments`
+
+<ParamField path="ID" type="int">
+  Primary key
+</ParamField>
+
+<ParamField path="NameFile" type="string">
+  Display name or title of the file
+</ParamField>
+
+<ParamField path="RouteFile" type="string">
+  Physical filename stored on server (URL-friendly slug)
+</ParamField>
+
+### Optional Foreign Keys
+
+<ParamField path="DocumentoId" type="int?">
+  Foreign key to Document entity (nullable)
+</ParamField>
+
+<ParamField path="Document" type="Document">
+  Navigation property to parent Document
+</ParamField>
+
+<ParamField path="MasterId" type="int?">
+  Foreign key to Master entity (nullable)
+</ParamField>
+
+<ParamField path="Masters" type="Master">
+  Navigation property to parent Master
+</ParamField>
+
+### Relationship Rules
+
+A FileDocument can be attached to **either** a Document **or** a Master, but not both:
+
+<Expandable title="Document Attachment">
+```csharp
+// File attached to a legal document
+var fileDoc = new FileDocument
+{
+    NameFile = "Estatutos de la Empresa",
+    RouteFile = "estatutos-de-la-empresa-2026.pdf",
+    DocumentoId = 10,  // Links to Document
+    MasterId = null     // Not linked to Master
+};
+// Physical file stored in: /images/filesDocuments/
+// Downloaded via: /Documents/documentos-publicos?routeFile=estatutos-de-la-empresa-2026.pdf
+```
+</Expandable>
+
+<Expandable title="Master Attachment">
+```csharp
+// File attached directly to a bidding announcement
+var fileDoc = new FileDocument
+{
+    NameFile = "Licitación Pública 001-2026",
+    RouteFile = "terminos-referencia-001-2026.pdf",
+    DocumentoId = null, // Not linked to Document
+    MasterId = 5        // Links to Master (NacionLicitante)
+};
+// Physical file stored in: /images/filesDocuments/
+// Downloaded via: /NacionLicitante/Documento-Oficial-de-la-convocatoria?routeFile=terminos-referencia-001-2026.pdf
+```
+</Expandable>
+
+### Common Usage Scenarios
+
+<ResponseField name="announcement-files" type="scenario">
+  **Bidding Announcement Files** - Technical specifications, terms of reference, and annexes are attached to Master entries where `NacionLicitante = true`
+</ResponseField>
+
+<ResponseField name="legal-documents" type="scenario">
+  **Legal Document Files** - Statutes, resolutions, and official documents are attached to Document entities
+</ResponseField>
+
+<ResponseField name="multi-file" type="scenario">
+  **Multiple Attachments** - A single Document or Master can have multiple FileDocument entries, each representing a separate PDF
+</ResponseField>
+
+### File Processing Flow
+
+When creating FileDocument entries, the system:
+
+1. **Extracts** the original filename from IFormFile
+2. **Formats** the filename to URL-friendly slug (removes spaces, special characters)
+3. **Uploads** the physical file to `/images/filesDocuments/` folder
+4. **Creates** FileDocument record with:
+   - `NameFile`: Original or display name
+   - `RouteFile`: Formatted filename on disk
+   - Foreign key to parent entity
+
+**Example from NacionLicitanteService:**
+```csharp
+foreach (var item in model.NacionLicitantegFile)
+{
+    string _nameFile = Path.GetFileNameWithoutExtension(item.FileName);
+    string _nameFileFormat = _formatStringUrl.FormatString(_nameFile);
+    
+    var _urlNameFile = _formatStringUrl.FormatString(_nameFileFormat);
+    var _file = _uploadedFileIIS.UploadedFileImage(item, _urlNameFile, "filesDocuments");
+    
+    var _fileDocuments = new FileDocument
+    {
+        NameFile = model.NameMaster,
+        RouteFile = _file,
+        MasterId = _master.Id
+    };
+    
+    await _context.AddAsync(_fileDocuments);
+}
+```
+
+### Deletion Cascade
+
+When parent entities are deleted, FileDocument entries are removed along with physical files:
+
+```csharp
+// From DocumentService.DeleteConfirmed
+foreach (var _deleteFiles in _deleteFileDocument)
+{
+    _uploadedFileIIS.DeleteConfirmed(_deleteFiles.RouteFile, "filesDocuments");
+    _context.Remove(new FileDocument { ID = _deleteFiles.ID });
+}
+```
 
 ---
 

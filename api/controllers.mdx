@@ -601,3 +601,692 @@ DateCreate.ToString("MMMM dd, yyyy", CultureInfo.CreateSpecificCulture("es-CO"))
 File uploads are processed through `IUploadedFileIIS` service with validation:
 - Images: JPG, JPEG, GIF, PNG (max 2MB)
 - PDFs: PDF format (max 10MB)
+
+---
+
+## HomeController
+
+Main landing page and public-facing content controller.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/`
+
+### Dependencies
+
+<ParamField path="_logger" type="ILogger<HomeController>">
+  Logging service for error tracking
+</ParamField>
+
+<ParamField path="_blogService" type="IBlogService">
+  Service to retrieve blog posts for homepage
+</ParamField>
+
+### Actions
+
+#### Index
+
+Displays the homepage with recent blog posts.
+
+<ResponseField name="return" type="IActionResult">
+  Main landing page view with 3 most recent blog posts
+</ResponseField>
+
+<ResponseField name="viewData" type="object">
+  Populates `ViewData["Blog"]` with latest posts via `LimitHome()`
+</ResponseField>
+
+```csharp
+public async Task<IActionResult> Index()
+```
+
+#### About
+
+Displays the "About Us" page.
+
+```csharp
+public IActionResult About()
+```
+
+#### FunctionManual
+
+Downloads the employee function manual PDF.
+
+<ResponseField name="return" type="FileResult">
+  PDF file stream for download
+</ResponseField>
+
+<ResponseField name="file" type="string">
+  `/files/manual-de-funciones.pdf`
+</ResponseField>
+
+```csharp
+public FileResult FunctionManual()
+```
+
+**Example:**
+```csharp
+// Downloads with friendly filename
+return File("/files/manual-de-funciones.pdf", 
+    "application/pdf", 
+    "manual-de-funciones-empresa-de-servicios-publicos-de-santa-fe-de-antioquia.pdf");
+```
+
+#### Privacy
+
+Displays the privacy policy page.
+
+```csharp
+public IActionResult Privacy()
+```
+
+#### Error
+
+Global error handler with request tracing.
+
+<ParamField query="responseCache" type="attribute">
+  No caching for error pages
+</ParamField>
+
+<ResponseField name="return" type="ErrorViewModel">
+  Error view with request ID for debugging
+</ResponseField>
+
+```csharp
+[ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+public IActionResult Error()
+```
+
+---
+
+## AdminController
+
+Administrative functions for SuperAdmin users including role management and homepage customization.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/Admin`
+
+### Dependencies
+
+<ParamField path="_roleManager" type="RoleManager<IdentityRole>">
+  ASP.NET Identity role manager
+</ParamField>
+
+<ParamField path="_uploadedFileIIS" type="IUploadedFileIIS">
+  File upload service for cover page management
+</ParamField>
+
+### Actions
+
+#### Index
+
+Lists all system roles.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` role
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  View with collection of roles from AspNetRoles table
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin")]
+public IActionResult Index()
+```
+
+#### Create (GET)
+
+Displays role creation form.
+
+```csharp
+[HttpGet]
+[Authorize(Roles = "SuperAdmin")]
+public IActionResult Create()
+```
+
+#### Create (POST)
+
+Creates a new system role.
+
+<ParamField body="model" type="ModelViewRoles" required>
+  Role data containing RoleName
+</ParamField>
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-steps">
+    1. Validates model state
+    2. Creates IdentityRole entity
+    3. Saves to AspNetRoles table
+    4. Returns errors if creation fails
+    5. Redirects to home on success
+  </Expandable>
+</ResponseField>
+
+```csharp
+[HttpPost]
+[Authorize(Roles = "SuperAdmin")]
+public async Task<IActionResult> Create(ModelViewRoles model)
+```
+
+**Example:**
+```csharp
+var identityRole = new IdentityRole
+{
+    Name = "UserApp"
+};
+await _roleManager.CreateAsync(identityRole);
+```
+
+#### Profile
+
+User profile management page.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin`, `Admin`, or `UserApp` role
+</ParamField>
+
+```csharp
+[HttpGet]
+[Authorize(Roles = "SuperAdmin,Admin,UserApp")]
+public IActionResult Profile()
+```
+
+#### AddCoverpage (GET)
+
+Displays form to upload homepage cover image.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` or `Admin` role
+</ParamField>
+
+```csharp
+[HttpGet]
+[Authorize(Roles = "SuperAdmin,Admin")]
+public IActionResult AddCoverpage()
+```
+
+#### AddCoverpage (POST)
+
+Uploads a new homepage cover image.
+
+<ParamField body="model" type="ModelViewCoverage" required>
+  Contains IFormFile for JPG image
+</ParamField>
+
+<ResponseField name="validations" type="object">
+  <Expandable title="validations">
+    - File must be provided
+    - Must be JPG format
+    - Replaces existing cover image
+    - Sets ViewBag.error or ViewBag.success messages
+  </Expandable>
+</ResponseField>
+
+```csharp
+[HttpPost]
+[Authorize(Roles = "SuperAdmin,Admin")]
+public IActionResult AddCoverpage(ModelViewCoverage model)
+```
+
+**Note:** Uses `UploadedFileImage("Coverpague", model.File, string.Empty, true)` with replace flag.
+
+#### TempleteCoverage
+
+Downloads the cover page design template.
+
+<ResponseField name="return" type="FileResult">
+  RAR file containing design guidelines
+</ResponseField>
+
+<ResponseField name="file" type="string">
+  `guia_para_la_portada.rar`
+</ResponseField>
+
+```csharp
+[HttpGet]
+[Authorize(Roles = "SuperAdmin,Admin")]
+public FileResult TempleteCoverage()
+```
+
+---
+
+## NacionLicitanteController
+
+Manages public procurement announcements and bidding processes (Licitaciones).
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/NacionLicitante`
+
+### Dependencies
+
+<ParamField path="_context" type="ApplicationDbContext">
+  Database context for queries
+</ParamField>
+
+<ParamField path="_nacionLicitante" type="INacionLicitanteService">
+  Service layer for announcement operations
+</ParamField>
+
+### Actions
+
+#### Index
+
+Administrative listing of all bidding announcements.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` or `Admin` role
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  View with collection of `ModelViewNacionLicitante` including dates formatted in Spanish
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Index()
+```
+
+#### Details (by URL)
+
+Public view of a specific bidding announcement with attached documents.
+
+<ParamField path="nameNacionLicitante" type="string" required>
+  URL-friendly announcement identifier
+</ParamField>
+
+<ResponseField name="route" type="string">
+  `/convocatorias/{nameNacionLicitante}`
+</ResponseField>
+
+<ResponseField name="includes" type="object">
+  <Expandable title="related-data">
+    - Announcement details
+    - Associated FileDocuments
+    - Related Documents collection
+    - Active status (validates dates)
+  </Expandable>
+</ResponseField>
+
+```csharp
+[Route("convocatorias/{nameNacionLicitante}")]
+public async Task<IActionResult> Details(string nameNacionLicitante)
+```
+
+**Status validation:**
+```csharp
+// Announcement is active if current date is between start and end dates
+bool statud = ValidateActivo(_master);
+// Checks: dateTime >= NacionLicitantegStartDate && dateTime <= NacionLicitanteEndDate
+```
+
+#### Create (GET)
+
+Displays form to create new bidding announcement.
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public IActionResult Create()
+```
+
+#### Create (POST)
+
+Creates a new bidding announcement with cover image and optional documents.
+
+<ParamField body="model" type="NacionLicitanteCreateDto" required>
+  Announcement data including dates and files
+</ParamField>
+
+<ResponseField name="validations" type="object">
+  <Expandable title="validations">
+    - Checks for duplicate announcement name
+    - Validates model state
+    - Creates announcement record
+    - Uploads cover image
+    - Attaches multiple file documents if provided
+  </Expandable>
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Create(NacionLicitanteCreateDto model)
+```
+
+#### Delete (GET)
+
+Displays confirmation view for announcement deletion.
+
+<ParamField path="id" type="int?" required>
+  Announcement ID
+</ParamField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Delete(int? id)
+```
+
+#### DeleteConfirmed
+
+Permanently removes announcement with all related files and documents.
+
+<ParamField path="id" type="int" required>
+  Announcement ID to delete
+</ParamField>
+
+<ResponseField name="cascade" type="object">
+  <Expandable title="deletion-cascade">
+    - Removes announcement cover image
+    - Deletes all associated FileDocuments and physical files
+    - Deletes related Documents with their FileDocuments
+    - Uses transaction for data integrity
+  </Expandable>
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+[HttpPost, ActionName("Delete")]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> DeleteConfirmed(int id)
+```
+
+#### OfficialLicitante
+
+Serves PDF documents for download.
+
+<ParamField query="routeFile" type="string" required>
+  Filename within filesDocuments directory
+</ParamField>
+
+<ResponseField name="route" type="string">
+  Action name: `Documento-Oficial-de-la-convocatoria`
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "UserApp")]
+[AllowAnonymous]
+[ActionName("Documento-Oficial-de-la-convocatoria")]
+public FileResult OfficialLicitante(string routeFile)
+```
+
+#### ListGetAll
+
+Public listing of all active announcements.
+
+<ResponseField name="route" type="string">
+  `/convocatorias`
+</ResponseField>
+
+<ResponseField name="filter" type="string">
+  Only displays announcements where `Statud == true`
+</ResponseField>
+
+```csharp
+[Route("convocatorias")]
+public async Task<IActionResult> ListGetAll()
+```
+
+---
+
+## BrigadesController
+
+Manages community brigade events and health campaigns.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/Brigades`
+
+### Dependencies
+
+<ParamField path="_brigadeService" type="IBrigadeService">
+  Service layer for brigade operations
+</ParamField>
+
+### Actions
+
+#### Index
+
+Administrative listing of all brigade events.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` or `Admin` role
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  Collection of brigades with formatted dates (Spanish locale)
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Index()
+```
+
+#### Details (by ID)
+
+Administrative view of brigade details.
+
+<ParamField path="id" type="int?" required>
+  Brigade ID
+</ParamField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Details(int? id)
+```
+
+#### Details (by URL)
+
+Public view of brigade event details.
+
+<ParamField path="nameBrigade" type="string" required>
+  URL-friendly brigade identifier
+</ParamField>
+
+<ResponseField name="route" type="string">
+  `/brigadas/{nameBrigade}`
+</ResponseField>
+
+```csharp
+[Route("brigadas/{nameBrigade}")]
+public async Task<IActionResult> Details(string nameBrigade)
+```
+
+**Example:**
+```csharp
+// URL: /brigadas/jornada-salud-barrio-centro
+// Displays brigade event with:
+// - Name, description, cover image
+// - Event date formatted in Spanish
+// - Author/organizer information
+```
+
+#### Create (GET)
+
+Displays form to create new brigade event.
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public IActionResult Create()
+```
+
+#### Create (POST)
+
+Creates a new brigade event.
+
+<ParamField body="model" type="BrigadeCreateDto" required>
+  Brigade data including event date and cover image
+</ParamField>
+
+<ResponseField name="validations" type="object">
+  <Expandable title="validations">
+    - Checks for duplicate brigade name
+    - Generates URL slug from name
+    - Uploads cover image to `brigade` folder
+    - Sets creation timestamp
+  </Expandable>
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+[HttpPost]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> Create(BrigadeCreateDto model)
+```
+
+#### Delete (GET)
+
+Displays confirmation for brigade deletion.
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Delete(int? id)
+```
+
+#### DeleteConfirmed
+
+Removes brigade event and cover image.
+
+<ParamField path="id" type="int" required>
+  Brigade ID
+</ParamField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+[HttpPost, ActionName("Delete")]
+[ValidateAntiForgeryToken]
+public async Task<IActionResult> DeleteConfirmed(int id)
+```
+
+#### BrigadesGetAll
+
+Public listing of all brigade events.
+
+<ResponseField name="route" type="string">
+  `/brigadas`
+</ResponseField>
+
+```csharp
+[Route("brigadas")]
+public async Task<IActionResult> BrigadesGetAll()
+```
+
+---
+
+## EmployeesController
+
+Manages organization employees and staff directory.
+
+**Namespace:** `prjESPSantaFeAnt.Controllers`  
+**Route Prefix:** `/Employees`
+
+### Dependencies
+
+<ParamField path="_employeeService" type="IEmployeeService">
+  Service layer for employee operations
+</ParamField>
+
+### Actions
+
+#### Index
+
+Administrative listing of all employees.
+
+<ParamField query="authorization" type="string" required>
+  Requires `SuperAdmin` or `Admin` role
+</ParamField>
+
+<ResponseField name="return" type="IActionResult">
+  Collection of employees with ID, name, occupation, and photo
+</ResponseField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Index()
+```
+
+#### Create (GET)
+
+Displays employee registration form.
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public IActionResult Create()
+```
+
+#### Create (POST)
+
+Registers a new employee.
+
+<ParamField body="model" type="EmployeeCreateDto" required>
+  Employee data including name, occupation, and photo
+</ParamField>
+
+<ResponseField name="process" type="object">
+  <Expandable title="creation-steps">
+    - Validates model state
+    - Uploads employee photo to `employees` folder
+    - Creates employee record
+    - Redirects to index on success
+  </Expandable>
+</ResponseField>
+
+```csharp
+[HttpPost]
+[ValidateAntiForgeryToken]
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Create(EmployeeCreateDto model)
+```
+
+#### Delete (GET)
+
+Displays confirmation for employee deletion.
+
+<ParamField path="id" type="int?" required>
+  Employee ID
+</ParamField>
+
+```csharp
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> Delete(int? id)
+```
+
+#### DeleteConfirmed
+
+Removes employee record and photo.
+
+<ParamField path="id" type="int" required>
+  Employee ID
+</ParamField>
+
+```csharp
+[HttpPost, ActionName("Delete")]
+[ValidateAntiForgeryToken]
+[Authorize(Roles = "SuperAdmin,Admin")]
+public async Task<IActionResult> DeleteConfirmed(int id)
+```
+
+#### ListEmployees
+
+Public staff directory page.
+
+<ResponseField name="route" type="string">
+  `/funcionarios`
+</ResponseField>
+
+<ResponseField name="access" type="string">
+  Anonymous access allowed
+</ResponseField>
+
+```csharp
+[Route("funcionarios")]
+[AllowAnonymous]
+public async Task<IActionResult> ListEmployees()
+```
+
+**Example:**
+```csharp
+// Public URL: /funcionarios
+// Displays all employees:
+// - Name: "Juan Pérez"
+// - Occupation: "Gerente General"
+// - Photo: employee-photo.jpg
+```
